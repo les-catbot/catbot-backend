@@ -1,0 +1,51 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - catbot-net
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: catbot
+      POSTGRES_PASSWORD: catbot
+      POSTGRES_DB: catbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - catbot-net
+
+  # llm:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - catbot-net
+
+volumes:
+  pgdata:
+  # ollama-data:
+
+networks:
+  catbot-net:
+    driver: bridge
