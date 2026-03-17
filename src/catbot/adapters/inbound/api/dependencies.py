@@ -16,6 +16,7 @@ from catbot.application.services.chat_service import ChatService
 from catbot.application.services.evaluation_service import EvaluationService
 from catbot.application.services.history_service import HistoryService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
+from catbot.application.services.user_service import UserService  # Novo import
 from catbot.config import get_settings
 
 
@@ -39,6 +40,7 @@ class Container:
         self.nlp_processor = StubNLPProcessor()
         self.llm_client = StubLLMClient()
 
+        # Instanciação dos serviços
         self.chat_service = ChatService(
             conversa_repo=self.conversa_repo,
             nlp_processor=self.nlp_processor,
@@ -52,6 +54,10 @@ class Container:
         )
         self.evaluation_service = EvaluationService(
             avaliacao_repo=self.avaliacao_repo,
+        )
+        # Adição do UserService ao container
+        self.user_service = UserService(
+            usuario_repo=self.usuario_repo,
         )
 
 
@@ -79,3 +85,7 @@ def get_history_service() -> HistoryService:
 
 def get_evaluation_service() -> EvaluationService:
     return get_container().evaluation_service
+
+
+def get_user_service() -> UserService:
+    return get_container().user_service
