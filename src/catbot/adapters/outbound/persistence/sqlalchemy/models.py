@@ -6,7 +6,17 @@ A conversão entre ORM model <-> domain entity será feita nos repositórios.
 
 import uuid
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    Text,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -143,4 +153,18 @@ class LogAdminModel(Base):
     usuario_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuario.id"))
     acao: Mapped[str] = mapped_column()
     descricao: Mapped[str] = mapped_column(Text, default="")
+    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChunkDocumentoModel(Base):
+    __tablename__ = "chunk_documento"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    documento_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("documento.id"))
+    versao_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("versao_documento.id"))
+    conteudo: Mapped[str] = mapped_column(Text)
+    indice_chunk: Mapped[int] = mapped_column(Integer)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    categoria: Mapped[str] = mapped_column(default="")
+    fonte: Mapped[str] = mapped_column(default="")
     criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())

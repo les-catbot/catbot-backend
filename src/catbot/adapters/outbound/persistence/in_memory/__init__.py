@@ -10,10 +10,14 @@ from catbot.adapters.outbound.persistence.in_memory.documento_repository import 
 from catbot.adapters.outbound.persistence.in_memory.usuario_repository import (
     InMemoryUsuarioRepository,
 )
+from catbot.adapters.outbound.persistence.in_memory.vector_repository import (
+    InMemoryVectorRepository,
+)
 
 __all__ = [
     "InMemoryAvaliacaoRepository",
     "InMemoryConversaRepository",
     "InMemoryDocumentoRepository",
     "InMemoryUsuarioRepository",
+    "InMemoryVectorRepository",
 ]

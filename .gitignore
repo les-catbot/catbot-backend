@@ -22,3 +22,5 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+.internal-docs/
