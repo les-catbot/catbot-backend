@@ -33,13 +33,10 @@ class Container:
         if settings.REPOSITORY_TYPE == "memory":
             self.perfil_repo = InMemoryPerfilRepository()
 
-            # --- MOCK / SEEDS PARA O BANCO EM MEMÓRIA ---
-            # Isso simula os perfis que já estariam salvos no banco de dados real
             perfil_admin = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000001"), nome="Administrador", descricao="Acesso total ao sistema")
             perfil_user = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000002"), nome="Usuário Padrão", descricao="Acesso comum")
             self.perfil_repo._store[perfil_admin.id] = perfil_admin
             self.perfil_repo._store[perfil_user.id] = perfil_user
-            # ---------------------------------------------
 
             self.usuario_repo = InMemoryUsuarioRepository()
             self.conversa_repo = InMemoryConversaRepository()
@@ -54,7 +51,6 @@ class Container:
         self.nlp_processor = StubNLPProcessor()
         self.llm_client = StubLLMClient()
 
-        # Instanciação dos serviços
         self.chat_service = ChatService(
             conversa_repo=self.conversa_repo,
             nlp_processor=self.nlp_processor,

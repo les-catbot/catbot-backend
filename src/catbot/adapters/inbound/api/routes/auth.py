@@ -3,7 +3,6 @@ from catbot.adapters.inbound.api.dependencies import get_auth_service
 from catbot.application.services.auth_service import AuthService
 from catbot.adapters.inbound.api.schemas.auth import Token, LoginRequest
 
-# Melhorando o nome da tag para ficar mais claro no Swagger
 router = APIRouter(tags=["Autenticação - Login e Geração de Tokens"])
 
 

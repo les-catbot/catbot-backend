@@ -100,7 +100,7 @@ perfis_router = APIRouter(
 
 
 @perfis_router.get(
-    "/",  # Mudei de "/perfil" para "/" para ficar no padrão REST (GET /api/v1/perfis)
+    "/",
     response_model=list[PerfilResponse],
     summary="Listar perfis disponíveis",
     description="Retorna todos os perfis cadastrados no banco (Ex: Administrador, Usuário Padrão). **Use esta rota para preencher o dropdown de seleção na tela de cadastro de usuário.**"
