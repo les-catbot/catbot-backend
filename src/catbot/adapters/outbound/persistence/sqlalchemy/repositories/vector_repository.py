@@ -1,5 +1,3 @@
-import math
-import struct
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -8,26 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from catbot.adapters.outbound.persistence.sqlalchemy.models import ChunkDocumentoModel
 from catbot.domain.entities.chunk_documento import ChunkDocumento
 from catbot.domain.ports.vector_repository import VectorRepository
-
-
-def _floats_to_bytes(vec: list[float]) -> bytes:
-    return struct.pack(f"{len(vec)}f", *vec)
-
-
-def _bytes_to_floats(raw: bytes) -> list[float]:
-    count = len(raw) // 4
-    return list(struct.unpack(f"{count}f", raw))
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    if len(a) != len(b):
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(x * x for x in b))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
 
 
 class SQLAlchemyVectorRepository(VectorRepository):
@@ -43,7 +21,7 @@ class SQLAlchemyVectorRepository(VectorRepository):
                     versao_id=c.versao_id,
                     conteudo=c.conteudo,
                     indice_chunk=c.indice_chunk,
-                    embedding=_floats_to_bytes(c.embedding),
+                    embedding=c.embedding,
                     categoria=c.categoria,
                     fonte=c.fonte,
                 )
@@ -77,15 +55,15 @@ class SQLAlchemyVectorRepository(VectorRepository):
         self, query_embedding: list[float], top_k: int = 5
     ) -> list[ChunkDocumento]:
         async with self._sf() as session:
-            result = await session.execute(select(ChunkDocumentoModel))
-            all_rows = result.scalars().all()
-
-        scored = [
-            (_to_entity(row), _cosine_similarity(query_embedding, _bytes_to_floats(row.embedding)))
-            for row in all_rows
-        ]
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [c for c, _ in scored[:top_k]]
+            stmt = (
+                select(ChunkDocumentoModel)
+                .order_by(
+                    ChunkDocumentoModel.embedding.cosine_distance(query_embedding)
+                )
+                .limit(top_k)
+            )
+            result = await session.execute(stmt)
+            return [_to_entity(r) for r in result.scalars().all()]
 
     async def get_by_documento(self, documento_id: UUID) -> list[ChunkDocumento]:
         async with self._sf() as session:
@@ -104,7 +82,7 @@ def _to_entity(row: ChunkDocumentoModel) -> ChunkDocumento:
         versao_id=row.versao_id,
         conteudo=row.conteudo,
         indice_chunk=row.indice_chunk,
-        embedding=_bytes_to_floats(row.embedding),
+        embedding=list(row.embedding),
         categoria=row.categoria,
         fonte=row.fonte,
         criado_em=row.criado_em,

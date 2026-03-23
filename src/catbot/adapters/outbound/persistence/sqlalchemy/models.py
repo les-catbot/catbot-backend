@@ -6,13 +6,13 @@ A conversão entre ORM model <-> domain entity será feita nos repositórios.
 
 import uuid
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    LargeBinary,
     Text,
     Uuid,
     func,
@@ -164,7 +164,7 @@ class ChunkDocumentoModel(Base):
     versao_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("versao_documento.id"))
     conteudo: Mapped[str] = mapped_column(Text)
     indice_chunk: Mapped[int] = mapped_column(Integer)
-    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    embedding = mapped_column(Vector())
     categoria: Mapped[str] = mapped_column(default="")
     fonte: Mapped[str] = mapped_column(default="")
     criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
