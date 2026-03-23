@@ -16,11 +16,11 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
 
     if settings.REPOSITORY_TYPE == "sqlalchemy":
-        from catbot.adapters.outbound.persistence.sqlalchemy.database import create_tables
+        from catbot.adapters.outbound.persistence.sqlalchemy.database import run_migrations
 
-        logger.info("Criando tabelas no banco de dados...")
-        await create_tables(settings.DATABASE_URL, echo=settings.DATABASE_ECHO)
-        logger.info("Tabelas criadas com sucesso.")
+        logger.info("Executando migrations do Alembic...")
+        await run_migrations(settings.DATABASE_URL)
+        logger.info("Migrations concluídas.")
 
     get_container()
     yield

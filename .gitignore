@@ -24,3 +24,5 @@ htmlcov/
 *.swo
 
 .internal-docs/
+
+CLAUDE.md
