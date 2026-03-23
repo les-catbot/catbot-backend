@@ -3,6 +3,10 @@
 O container é montado uma vez no startup da aplicação.
 As rotas recebem os serviços via Depends() do FastAPI.
 """
+import uuid
+from catbot.domain.entities.perfil import Perfil
+from catbot.domain.ports.perfil_repository import PerfilRepository
+from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InMemoryPerfilRepository
 
 from catbot.adapters.outbound.llm.stub_client import StubLLMClient
 from catbot.adapters.outbound.nlp.stub_processor import StubNLPProcessor
@@ -16,7 +20,7 @@ from catbot.application.services.chat_service import ChatService
 from catbot.application.services.evaluation_service import EvaluationService
 from catbot.application.services.history_service import HistoryService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
-from catbot.application.services.user_service import UserService  # Novo import
+from catbot.application.services.user_service import UserService
 from catbot.config import get_settings
 
 
@@ -27,6 +31,16 @@ class Container:
         settings = get_settings()
 
         if settings.REPOSITORY_TYPE == "memory":
+            self.perfil_repo = InMemoryPerfilRepository()
+
+            # --- MOCK / SEEDS PARA O BANCO EM MEMÓRIA ---
+            # Isso simula os perfis que já estariam salvos no banco de dados real
+            perfil_admin = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000001"), nome="Administrador", descricao="Acesso total ao sistema")
+            perfil_user = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000002"), nome="Usuário Padrão", descricao="Acesso comum")
+            self.perfil_repo._store[perfil_admin.id] = perfil_admin
+            self.perfil_repo._store[perfil_user.id] = perfil_user
+            # ---------------------------------------------
+
             self.usuario_repo = InMemoryUsuarioRepository()
             self.conversa_repo = InMemoryConversaRepository()
             self.documento_repo = InMemoryDocumentoRepository()
@@ -55,9 +69,10 @@ class Container:
         self.evaluation_service = EvaluationService(
             avaliacao_repo=self.avaliacao_repo,
         )
-        # Adição do UserService ao container
+        # Adição do UserService ao container (agora injetando o perfil_repo também)
         self.user_service = UserService(
             usuario_repo=self.usuario_repo,
+            perfil_repo=self.perfil_repo,
         )
 
 
@@ -89,3 +104,6 @@ def get_evaluation_service() -> EvaluationService:
 
 def get_user_service() -> UserService:
     return get_container().user_service
+
+def get_perfil_repository() -> PerfilRepository:
+    return get_container().perfil_repo
