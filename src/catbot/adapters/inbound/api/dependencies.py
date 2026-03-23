@@ -22,7 +22,7 @@ from catbot.application.services.history_service import HistoryService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.application.services.user_service import UserService
 from catbot.config import get_settings
-
+from catbot.application.services.auth_service import AuthService
 
 class Container:
     """Poor-man's DI container. Troca fácil entre in-memory e SQLAlchemy."""
@@ -74,6 +74,9 @@ class Container:
             usuario_repo=self.usuario_repo,
             perfil_repo=self.perfil_repo,
         )
+        self.auth_service = AuthService(
+            usuario_repo=self.usuario_repo
+        )
 
 
 _container: Container | None = None
@@ -107,3 +110,6 @@ def get_user_service() -> UserService:
 
 def get_perfil_repository() -> PerfilRepository:
     return get_container().perfil_repo
+
+def get_auth_service() -> AuthService:
+    return get_container().auth_service
