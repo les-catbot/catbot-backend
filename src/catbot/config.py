@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "http://localhost:11434"
     LLM_MODEL: str = "llama3"
 
+    EMBEDDING_TYPE: str = "stub"
+    EMBEDDING_MODEL: str = "nomic-embed-text"
+
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 100
+
     SECRET_KEY: str = "teste"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 

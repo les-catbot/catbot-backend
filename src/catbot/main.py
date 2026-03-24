@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,9 +8,20 @@ from catbot.adapters.inbound.api.dependencies import get_container
 from catbot.adapters.inbound.api.router import api_router
 from catbot.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+
+    if settings.REPOSITORY_TYPE == "sqlalchemy":
+        from catbot.adapters.outbound.persistence.sqlalchemy.database import run_migrations
+
+        logger.info("Executando migrations do Alembic...")
+        await run_migrations(settings.DATABASE_URL)
+        logger.info("Migrations concluídas.")
+
     get_container()
     yield
 

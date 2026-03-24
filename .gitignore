@@ -22,3 +22,7 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+.internal-docs/
+
+CLAUDE.md
