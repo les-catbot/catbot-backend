@@ -17,22 +17,11 @@ from sqlalchemy import (
     Uuid,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
-
-
-class UsuarioModel(Base):
-    __tablename__ = "usuario"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    nome: Mapped[str] = mapped_column()
-    email: Mapped[str] = mapped_column(unique=True)
-    senha_hash: Mapped[str] = mapped_column()
-    perfil_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("perfil.id"), nullable=True)
-    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PerfilModel(Base):
@@ -42,6 +31,22 @@ class PerfilModel(Base):
     nome: Mapped[str] = mapped_column()
     descricao: Mapped[str] = mapped_column(Text, default="")
 
+    # Relação 1:N (Um Perfil tem muitos usuários)
+    usuarios: Mapped[list["UsuarioModel"]] = relationship(back_populates="perfil")
+
+
+class UsuarioModel(Base):
+    __tablename__ = "usuario"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    nome: Mapped[str] = mapped_column()
+    email: Mapped[str] = mapped_column(unique=True)
+    senha_hash: Mapped[str] = mapped_column()
+    perfil_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("perfil.id"))  # Removido nullable=True para ser obrigatório
+    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relação N:1 (Um Usuário pertence a um perfil)
+    perfil: Mapped["PerfilModel"] = relationship(back_populates="usuarios", lazy="joined")
 
 class ConversaModel(Base):
     __tablename__ = "conversa"

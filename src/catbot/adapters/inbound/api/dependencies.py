@@ -3,6 +3,10 @@
 O container é montado uma vez no startup da aplicação.
 As rotas recebem os serviços via Depends() do FastAPI.
 """
+import uuid
+from catbot.domain.entities.perfil import Perfil
+from catbot.domain.ports.perfil_repository import PerfilRepository
+from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InMemoryPerfilRepository
 
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
 from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
@@ -31,7 +35,7 @@ from catbot.application.services.history_service import HistoryService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.application.services.user_service import UserService
 from catbot.config import get_settings
-
+from catbot.application.services.auth_service import AuthService
 
 class Container:
     """Poor-man's DI container. Troca fácil entre in-memory e SQLAlchemy."""
@@ -40,6 +44,13 @@ class Container:
         settings = get_settings()
 
         if settings.REPOSITORY_TYPE == "memory":
+            self.perfil_repo = InMemoryPerfilRepository()
+
+            perfil_admin = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000001"), nome="Administrador", descricao="Acesso total ao sistema")
+            perfil_user = Perfil(id=uuid.UUID("00000000-0000-0000-0000-000000000002"), nome="Usuário Padrão", descricao="Acesso comum")
+            self.perfil_repo._store[perfil_admin.id] = perfil_admin
+            self.perfil_repo._store[perfil_user.id] = perfil_user
+
             self.usuario_repo = InMemoryUsuarioRepository()
             self.conversa_repo = InMemoryConversaRepository()
             self.documento_repo = InMemoryDocumentoRepository()
@@ -88,8 +99,14 @@ class Container:
         self.evaluation_service = EvaluationService(
             avaliacao_repo=self.avaliacao_repo,
         )
+        
+        # Adição do UserService ao container (agora injetando o perfil_repo também)
         self.user_service = UserService(
             usuario_repo=self.usuario_repo,
+            perfil_repo=self.perfil_repo,
+        )
+        self.auth_service = AuthService(
+            usuario_repo=self.usuario_repo
         )
 
 
@@ -121,3 +138,9 @@ def get_evaluation_service() -> EvaluationService:
 
 def get_user_service() -> UserService:
     return get_container().user_service
+
+def get_perfil_repository() -> PerfilRepository:
+    return get_container().perfil_repo
+
+def get_auth_service() -> AuthService:
+    return get_container().auth_service
