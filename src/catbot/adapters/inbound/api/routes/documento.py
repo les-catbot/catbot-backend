@@ -90,6 +90,7 @@ async def obter_documento(
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento não encontrado.")
     chunks = await service._vector.get_by_documento(documento_id)
+    versoes = await service._repo.get_versoes(documento_id)
     return DocumentoDetalheResponse(
         id=doc.id,
         titulo=doc.titulo,
@@ -97,6 +98,7 @@ async def obter_documento(
         fonte=doc.fonte,
         criado_em=doc.criado_em,
         total_chunks=len(chunks),
+        versoes=versoes,
     )
 
 
