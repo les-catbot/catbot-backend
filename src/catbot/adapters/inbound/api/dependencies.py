@@ -7,12 +7,13 @@ import uuid
 from catbot.domain.entities.perfil import Perfil
 from catbot.domain.ports.perfil_repository import PerfilRepository
 from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InMemoryPerfilRepository
-# IMPORTAÇÃO NOVA: O repositório definitivo do SQLAlchemy
 from catbot.adapters.outbound.persistence.sqlalchemy.repositories.perfil_repository import SQLAlchemyPerfilRepository
 
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
 from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
 from catbot.adapters.outbound.llm.stub_client import StubLLMClient
+# NOVA IMPORTAÇÃO: Cliente LLM Real
+from catbot.adapters.outbound.llm.ollama_client import OllamaLLMClient
 from catbot.adapters.outbound.nlp.stub_processor import StubNLPProcessor
 from catbot.adapters.outbound.persistence.in_memory import (
     InMemoryAvaliacaoRepository,
@@ -64,9 +65,7 @@ class Container:
                 settings.DATABASE_URL, echo=settings.DATABASE_ECHO
             )
 
-            # SOLUÇÃO DEFINITIVA: Injetando o repositório conectado ao banco de dados real
             self.perfil_repo = SQLAlchemyPerfilRepository(sf)
-
             self.usuario_repo = SQLAlchemyUsuarioRepository(sf)
             self.conversa_repo = SQLAlchemyConversaRepository(sf)
             self.documento_repo = SQLAlchemyDocumentoRepository(sf)
@@ -82,17 +81,18 @@ class Container:
                 base_url=settings.LLM_BASE_URL,
                 model=settings.EMBEDDING_MODEL,
             )
+            # Ligar o Llama 3 real se o Ollama estiver ativado
+            self.llm_client = OllamaLLMClient(
+                base_url=settings.LLM_BASE_URL,
+                model=settings.LLM_MODEL,
+            )
         else:
             self.embedding_service = StubEmbeddingService()
+            self.llm_client = StubLLMClient()
 
         self.nlp_processor = StubNLPProcessor()
-        self.llm_client = StubLLMClient()
 
-        self.chat_service = ChatService(
-            conversa_repo=self.conversa_repo,
-            nlp_processor=self.nlp_processor,
-            llm_client=self.llm_client,
-        )
+        # O kb_service precisa de ser instanciado antes do chat_service para podermos injetá-lo
         self.knowledge_base_service = KnowledgeBaseService(
             documento_repo=self.documento_repo,
             embedding_service=self.embedding_service,
@@ -100,6 +100,14 @@ class Container:
             chunk_size=settings.CHUNK_SIZE,
             chunk_overlap=settings.CHUNK_OVERLAP,
         )
+
+        self.chat_service = ChatService(
+            conversa_repo=self.conversa_repo,
+            nlp_processor=self.nlp_processor,
+            llm_client=self.llm_client,
+            kb_service=self.knowledge_base_service, # Ligação do Motor RAG feita!
+        )
+
         self.history_service = HistoryService(
             conversa_repo=self.conversa_repo,
         )
