@@ -26,11 +26,13 @@ class ChatService:
         nlp_processor: NLPProcessor,
         llm_client: LLMClient,
         kb_service: KnowledgeBaseService,  # NOVO: Injetando o motor de busca
+        rag_top_k: int = 5,
     ) -> None:
         self._conversa_repo = conversa_repo
         self._nlp = nlp_processor
         self._llm = llm_client
         self._kb = kb_service
+        self._rag_top_k = rag_top_k
 
     async def iniciar_conversa(self, usuario_id: UUID) -> Conversa:
         """Inicia uma nova sessão de chat para o usuário."""
@@ -58,7 +60,7 @@ class ChatService:
 
         # 2. Busca Semântica no Banco Vetorial (O coração do RAG)
         # Traz os 3 blocos de texto mais similares à pergunta do utilizador
-        chunks_relevantes = await self._kb.buscar_similar(msg_usuario.conteudo, top_k=3)
+        chunks_relevantes = await self._kb.buscar_similar(msg_usuario.conteudo, top_k=self._rag_top_k)
 
         # 3. Montagem do Contexto (Memória) para o LLM
         context = f"Intenção detectada: {nlp_result.intencao or 'desconhecida'}\n\n"

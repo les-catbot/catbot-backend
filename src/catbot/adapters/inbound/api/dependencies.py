@@ -105,7 +105,8 @@ class Container:
             conversa_repo=self.conversa_repo,
             nlp_processor=self.nlp_processor,
             llm_client=self.llm_client,
-            kb_service=self.knowledge_base_service, # Ligação do Motor RAG feita!
+            kb_service=self.knowledge_base_service,
+            rag_top_k=settings.RAG_TOP_K,
         )
 
         self.history_service = HistoryService(
