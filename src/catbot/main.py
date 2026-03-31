@@ -13,15 +13,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
-
-    if settings.REPOSITORY_TYPE == "sqlalchemy":
-        from catbot.adapters.outbound.persistence.sqlalchemy.database import run_migrations
-
-        logger.info("Executando migrations do Alembic...")
-        await run_migrations(settings.DATABASE_URL)
-        logger.info("Migrations concluídas.")
-
+    # Apenas inicializamos as injeções de dependência da Arquitetura Hexagonal.
+    # As migrações do banco de dados (Alembic) devem ser rodadas separadamente
+    # via CLI para evitar travamentos (deadlocks) no boot do servidor assíncrono.
     get_container()
     yield
 
@@ -37,6 +31,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Configuração de CORS para permitir que o frontend comunique com a API
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -45,6 +40,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Regista todas as rotas (Inbound Adapters)
     app.include_router(api_router)
     return app
 

@@ -7,6 +7,8 @@ import uuid
 from catbot.domain.entities.perfil import Perfil
 from catbot.domain.ports.perfil_repository import PerfilRepository
 from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InMemoryPerfilRepository
+# IMPORTAÇÃO NOVA: O repositório definitivo do SQLAlchemy
+from catbot.adapters.outbound.persistence.sqlalchemy.repositories.perfil_repository import SQLAlchemyPerfilRepository
 
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
 from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
@@ -56,10 +58,15 @@ class Container:
             self.documento_repo = InMemoryDocumentoRepository()
             self.avaliacao_repo = InMemoryAvaliacaoRepository()
             self.vector_repo = InMemoryVectorRepository()
+
         elif settings.REPOSITORY_TYPE == "sqlalchemy":
             sf = create_session_factory(
                 settings.DATABASE_URL, echo=settings.DATABASE_ECHO
             )
+
+            # SOLUÇÃO DEFINITIVA: Injetando o repositório conectado ao banco de dados real
+            self.perfil_repo = SQLAlchemyPerfilRepository(sf)
+
             self.usuario_repo = SQLAlchemyUsuarioRepository(sf)
             self.conversa_repo = SQLAlchemyConversaRepository(sf)
             self.documento_repo = SQLAlchemyDocumentoRepository(sf)
@@ -99,8 +106,7 @@ class Container:
         self.evaluation_service = EvaluationService(
             avaliacao_repo=self.avaliacao_repo,
         )
-        
-        # Adição do UserService ao container (agora injetando o perfil_repo também)
+
         self.user_service = UserService(
             usuario_repo=self.usuario_repo,
             perfil_repo=self.perfil_repo,

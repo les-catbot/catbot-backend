@@ -8,7 +8,12 @@ RUN apt-get update && \
 
 COPY pyproject.toml ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir .
+
+# Correção: Adicionado o grupo opcional "[nlp]" para instalar o spaCy
+RUN pip install --no-cache-dir ".[nlp]"
+
+# Agora o spaCy está instalado e este comando funcionará
+RUN python -m spacy download pt_core_news_sm
 
 FROM base AS production
 COPY alembic.ini ./
@@ -17,6 +22,7 @@ EXPOSE 8000
 CMD ["uvicorn", "catbot.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS development
+# Instala as dependências de desenvolvimento por cima da base
 RUN pip install --no-cache-dir ".[dev]"
 COPY . .
 EXPOSE 8000

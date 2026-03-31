@@ -54,9 +54,11 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: ["ollama", "pull", "nomic-embed-text"]
+    # Modificação: Puxar o modelo de embeddings (nomic) e de LLM (llama3)
+    entrypoint: ["/bin/sh", "-c", "ollama pull nomic-embed-text && ollama pull llama3"]
     environment:
       OLLAMA_HOST: http://ollama:11434
+      PYTHONPATH : /app/src
     networks:
       - catbot-net
 
