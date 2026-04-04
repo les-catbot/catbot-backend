@@ -13,6 +13,7 @@ from catbot.adapters.inbound.api.schemas.documento import (
     IndexacaoResponse,
     VersaoDocumentoResponse,
 )
+from catbot.application.document_processor import DocumentProcessor
 from catbot.application.services.knowledge_base_service import (
     IndexingError,
     KnowledgeBaseService,
@@ -23,12 +24,12 @@ router = APIRouter(prefix="/documentos", tags=["documentos"])
 
 @router.post("/", response_model=IndexacaoResponse, status_code=status.HTTP_201_CREATED)
 async def cadastrar_documento(
-    titulo: str = Form(...),
-    categoria: str = Form(...),
-    fonte: str = Form(...),
-    conteudo: str | None = Form(None),
-    arquivo: UploadFile | None = File(None),
-    service: KnowledgeBaseService = Depends(get_knowledge_base_service),
+        titulo: str = Form(...),
+        categoria: str = Form(...),
+        fonte: str = Form(...),
+        conteudo: str | None = Form(None),
+        arquivo: UploadFile | None = File(None),
+        service: KnowledgeBaseService = Depends(get_knowledge_base_service),
 ):
     """Upload a document (file or raw text) for indexing."""
     if not conteudo and not arquivo:
@@ -39,26 +40,50 @@ async def cadastrar_documento(
 
     arquivo_bytes: bytes | None = None
     arquivo_nome: str | None = None
+    texto_final = conteudo or ""
+
     if arquivo:
+        if not arquivo.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Apenas arquivos em formato PDF são permitidos.")
+
         arquivo_bytes = await arquivo.read()
         arquivo_nome = arquivo.filename
 
+        # --- NOVA LÓGICA DE EXTRAÇÃO DE PDF ---
+        try:
+            texto_extraido = DocumentProcessor.extract_text_from_pdf(arquivo_bytes)
+            # Concatena o texto extraído com o conteúdo manual (se o usuário preencheu ambos)
+            texto_final = f"{texto_final}\n\n{texto_extraido}".strip()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Erro ao tentar ler o PDF: {str(e)}"
+            )
+
+    if not texto_final.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nenhum texto pôde ser extraído. O PDF pode estar vazio ou ser uma imagem (scaneado)."
+        )
+
     try:
+        # Passamos o texto_final (que agora tem o texto do PDF) para o service
         doc = await service.cadastrar_documento(
             titulo=titulo,
             categoria=categoria,
             fonte=fonte,
-            conteudo=conteudo,
+            conteudo=texto_final,
             arquivo_bytes=arquivo_bytes,
             arquivo_nome=arquivo_nome,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    except IndexingError as exc:
+    except Exception as exc:  # Trata o seu IndexingError ou qualquer outro erro de negócio
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
         )
 
+    # Busca a quantidade de chunks gerados no Vector DB para retornar na resposta
     chunks = await service._vector.get_by_documento(doc.id)
 
     return IndexacaoResponse(

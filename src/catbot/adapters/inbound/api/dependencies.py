@@ -12,9 +12,12 @@ from catbot.adapters.outbound.persistence.sqlalchemy.repositories.perfil_reposit
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
 from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
 from catbot.adapters.outbound.llm.stub_client import StubLLMClient
-# NOVA IMPORTAÇÃO: Cliente LLM Real
 from catbot.adapters.outbound.llm.ollama_client import OllamaLLMClient
-from catbot.adapters.outbound.nlp.stub_processor import StubNLPProcessor
+
+# IMPORTAÇÕES DO NLP ATUALIZADAS
+from catbot.adapters.outbound.nlp.spacy_processor import SpacyNLPProcessor
+from catbot.adapters.outbound.nlp.hybrid_nlp_processor import HybridNLPProcessor
+
 from catbot.adapters.outbound.persistence.in_memory import (
     InMemoryAvaliacaoRepository,
     InMemoryConversaRepository,
@@ -81,7 +84,6 @@ class Container:
                 base_url=settings.LLM_BASE_URL,
                 model=settings.EMBEDDING_MODEL,
             )
-            # Ligar o Llama 3 real se o Ollama estiver ativado
             self.llm_client = OllamaLLMClient(
                 base_url=settings.LLM_BASE_URL,
                 model=settings.LLM_MODEL,
@@ -90,9 +92,13 @@ class Container:
             self.embedding_service = StubEmbeddingService()
             self.llm_client = StubLLMClient()
 
-        self.nlp_processor = StubNLPProcessor()
+        # CONFIGURAÇÃO DO NLP HÍBRIDO
+        self.spacy_processor = SpacyNLPProcessor()
+        self.nlp_processor = HybridNLPProcessor(
+            spacy_processor=self.spacy_processor,
+            llm_client=self.llm_client
+        )
 
-        # O kb_service precisa de ser instanciado antes do chat_service para podermos injetá-lo
         self.knowledge_base_service = KnowledgeBaseService(
             documento_repo=self.documento_repo,
             embedding_service=self.embedding_service,

@@ -39,8 +39,7 @@ class OllamaLLMClient(LLMClient):
         }
 
         try:
-            # Aumentamos o timeout porque os LLMs locais podem demorar alguns segundos a processar
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{self.base_url}/api/generate",
                     json=payload

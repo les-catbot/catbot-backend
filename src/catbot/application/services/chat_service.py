@@ -25,7 +25,7 @@ class ChatService:
         conversa_repo: ConversaRepository,
         nlp_processor: NLPProcessor,
         llm_client: LLMClient,
-        kb_service: KnowledgeBaseService,  # NOVO: Injetando o motor de busca
+        kb_service: KnowledgeBaseService,
         rag_top_k: int = 5,
     ) -> None:
         self._conversa_repo = conversa_repo
@@ -55,28 +55,49 @@ class ChatService:
         )
         msg_usuario = await self._conversa_repo.add_mensagem(msg_usuario)
 
-        # 1. Processamento NLP para entender intenção
+        # 1. Processamento NLP Híbrido (Intenção e Entidades)
         nlp_result = await self._nlp.process(msg_usuario.conteudo)
 
-        # 2. Busca Semântica no Banco Vetorial (O coração do RAG)
-        # Traz os 3 blocos de texto mais similares à pergunta do utilizador
-        chunks_relevantes = await self._kb.buscar_similar(msg_usuario.conteudo, top_k=self._rag_top_k)
+        print(f"\n[DEBUG NLP] Intenção detectada: {nlp_result.intencao}")
+        print(f"[DEBUG NLP] Entidades: {nlp_result.entidades}")
 
-        # 3. Montagem do Contexto (Memória) para o LLM
-        context = f"Intenção detectada: {nlp_result.intencao or 'desconhecida'}\n\n"
-
-        if chunks_relevantes:
-            context += "INFORMAÇÕES RECUPERADAS DA BASE DE CONHECIMENTO:\n"
-            for i, chunk in enumerate(chunks_relevantes, 1):
-                context += f"--- Documento {i} (Fonte: {chunk.fonte}) ---\n{chunk.conteudo}\n\n"
+        # Se for apenas saudação, podemos pular a busca no Vector DB e responder direto
+        if nlp_result.intencao == "SAUDACAO_OU_OUTROS":
+            llm_response = await self._llm.generate(
+                prompt=msg_usuario.conteudo,
+                context="Intenção: SAUDACAO_OU_OUTROS. Responda educadamente como CatBot, o assistente do IFES."
+            )
         else:
-            context += "Nenhuma informação relevante encontrada na base de conhecimento.\n\n"
+            # 2. Busca Semântica Enriquecida no Banco Vetorial
+            query_busca = msg_usuario.conteudo
+            if nlp_result.entidades:
+                termos_entidades = " ".join(str(v) for v in nlp_result.entidades.values())
+                # Junta a intenção, os termos extraídos e a pergunta original para uma busca fortíssima
+                query_busca = f"{nlp_result.intencao} {termos_entidades} {msg_usuario.conteudo}"
+                print(f"[DEBUG RAG] Query Vetorial: {query_busca}")
 
-        # 4. Geração da Resposta pela Inteligência Artificial
-        llm_response = await self._llm.generate(
-            prompt=msg_usuario.conteudo,
-            context=context,
-        )
+            chunks_relevantes = await self._kb.buscar_similar(query_busca, top_k=self._rag_top_k)
+
+            print(f"[DEBUG RAG] Encontrou {len(chunks_relevantes)} pedaços de texto no banco.")
+            if chunks_relevantes:
+                print(f"[DEBUG RAG] Melhor texto encontrado: {chunks_relevantes[0].conteudo[:150]}...")
+
+            # 3. Montagem do Contexto (Memória) para o LLM
+            context = f"Intenção detectada do usuário: {nlp_result.intencao}\n"
+            context += f"Entidades identificadas: {nlp_result.entidades}\n\n"
+
+            if chunks_relevantes:
+                context += "INFORMAÇÕES RECUPERADAS DA BASE DE CONHECIMENTO DO IFES:\n"
+                for i, chunk in enumerate(chunks_relevantes, 1):
+                    context += f"--- Documento {i} (Fonte: {chunk.fonte}) ---\n{chunk.conteudo}\n\n"
+            else:
+                context += "Nenhuma informação relevante encontrada na base de conhecimento para essa pergunta.\n\n"
+
+            # 4. Geração da Resposta com RAG
+            llm_response = await self._llm.generate(
+                prompt=msg_usuario.conteudo,
+                context=context,
+            )
 
         msg_bot = Mensagem(
             conversa_id=conversa_id,
