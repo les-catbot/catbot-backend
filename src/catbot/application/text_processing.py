@@ -3,13 +3,8 @@
 import io
 import re
 
-
 def extract_text(file_content: bytes | None, filename: str | None, raw_text: str | None) -> str:
-    """Extract clean text from a file or raw input.
-
-    Exactly one of (file_content + filename) or raw_text must be provided.
-    Raises ValueError when the input cannot be processed.
-    """
+    """Extract clean text from a file or raw input."""
     if raw_text:
         return _clean(raw_text)
 
@@ -44,59 +39,42 @@ def _clean(text: str) -> str:
 
 def chunk_text(
     text: str,
-    chunk_size: int = 500,
-    overlap: int = 100,
+    chunk_size: int = 800,
+    overlap: int = 200,
 ) -> list[str]:
-    """Split text into overlapping chunks, respecting sentence boundaries.
-
-    Args:
-        text: The full text to split.
-        chunk_size: Target number of characters per chunk.
-        overlap: Number of characters to overlap between consecutive chunks.
-
-    Returns:
-        Ordered list of text chunks. Empty list if the input is blank.
+    """
+    Divide o texto em chunks (pedaços) baseados em tamanho de caracteres,
+    mas garante que o corte ocorra em limites de palavras (espaços) para não quebrar a semântica.
     """
     if not text.strip():
         return []
 
-    sentences = _split_sentences(text)
+    # Divide o texto em palavras para evitar cortes no meio de uma palavra
+    words = text.split(" ")
     chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
 
-    for sentence in sentences:
-        sentence_len = len(sentence)
+    current_chunk_words: list[str] = []
+    current_length = 0
 
-        if current_len + sentence_len > chunk_size and current:
-            chunks.append(" ".join(current))
-            overlap_text = " ".join(current)
-            _keep = _tail_within(overlap_text, overlap)
-            current = [_keep] if _keep else []
-            current_len = len(_keep) if _keep else 0
+    # Heurística para manter a proporção de overlap em palavras (tamanho médio de palavra = 6 caracteres)
+    overlap_words_count = max(1, overlap // 6)
 
-        current.append(sentence)
-        current_len += sentence_len + 1
+    for word in words:
+        word_len = len(word) + 1  # +1 para o espaço
 
-    if current:
-        chunks.append(" ".join(current))
+        if current_length + word_len > chunk_size and current_chunk_words:
+            # Salva o chunk atual
+            chunks.append(" ".join(current_chunk_words))
+
+            # Prepara o próximo chunk pegando o overlap do final do chunk anterior
+            current_chunk_words = current_chunk_words[-overlap_words_count:]
+            current_length = sum(len(w) + 1 for w in current_chunk_words)
+
+        current_chunk_words.append(word)
+        current_length += word_len
+
+    # Adiciona o último pedaço, se sobrar algo
+    if current_chunk_words:
+        chunks.append(" ".join(current_chunk_words))
 
     return chunks
-
-
-def _split_sentences(text: str) -> list[str]:
-    """Heuristic sentence splitter that handles common abbreviations."""
-    parts = re.split(r"(?<=[.!?])\s+", text)
-    return [s.strip() for s in parts if s.strip()]
-
-
-def _tail_within(text: str, max_chars: int) -> str:
-    """Return the rightmost portion of *text* fitting within *max_chars*,
-    aligned to a sentence boundary when possible."""
-    if len(text) <= max_chars:
-        return text
-    tail = text[-max_chars:]
-    boundary = tail.find(". ")
-    if boundary != -1:
-        return tail[boundary + 2 :]
-    return tail

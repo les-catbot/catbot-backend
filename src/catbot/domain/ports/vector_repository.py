@@ -21,9 +21,8 @@ class VectorRepository(ABC):
         ...
 
     @abstractmethod
-    async def search_similar(
-        self, query_embedding: list[float], top_k: int = 5
-    ) -> list[ChunkDocumento]:
+    async def search_similar(self, query_embedding: list[float], categoria: str | None = None, top_k: int = 5) -> list[
+        ChunkDocumento]:
         """Return the top_k most similar chunks by cosine similarity."""
         ...
 

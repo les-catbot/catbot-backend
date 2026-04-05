@@ -52,16 +52,21 @@ class SQLAlchemyVectorRepository(VectorRepository):
             return result.rowcount
 
     async def search_similar(
-        self, query_embedding: list[float], top_k: int = 5
+            self, query_embedding: list[float], categoria: str | None = None, top_k: int = 5
     ) -> list[ChunkDocumento]:
         async with self._sf() as session:
-            stmt = (
-                select(ChunkDocumentoModel)
-                .order_by(
-                    ChunkDocumentoModel.embedding.cosine_distance(query_embedding)
-                )
-                .limit(top_k)
-            )
+            stmt = select(ChunkDocumentoModel)
+
+            # --- FILTRO SEMÂNTICO (PRE-FILTERING) ---
+            # Filtra pela categoria ANTES de fazer o cálculo matemático de vetores
+            if categoria:
+                stmt = stmt.where(ChunkDocumentoModel.categoria == categoria)
+
+            # Calcula a similaridade do cosseno e limita aos top_k
+            stmt = stmt.order_by(
+                ChunkDocumentoModel.embedding.cosine_distance(query_embedding)
+            ).limit(top_k)
+
             result = await session.execute(stmt)
             return [_to_entity(r) for r in result.scalars().all()]
 

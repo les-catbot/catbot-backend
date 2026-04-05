@@ -10,11 +10,8 @@ from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InM
 from catbot.adapters.outbound.persistence.sqlalchemy.repositories.perfil_repository import SQLAlchemyPerfilRepository
 
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
-from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
-from catbot.adapters.outbound.llm.stub_client import StubLLMClient
 from catbot.adapters.outbound.llm.ollama_client import OllamaLLMClient
 
-# IMPORTAÇÕES DO NLP ATUALIZADAS
 from catbot.adapters.outbound.nlp.spacy_processor import SpacyNLPProcessor
 from catbot.adapters.outbound.nlp.hybrid_nlp_processor import HybridNLPProcessor
 
@@ -79,18 +76,15 @@ class Container:
                 f"Repository type '{settings.REPOSITORY_TYPE}' não suportado."
             )
 
-        if settings.EMBEDDING_TYPE == "ollama":
-            self.embedding_service = OllamaEmbeddingService(
-                base_url=settings.LLM_BASE_URL,
-                model=settings.EMBEDDING_MODEL,
-            )
-            self.llm_client = OllamaLLMClient(
-                base_url=settings.LLM_BASE_URL,
-                model=settings.LLM_MODEL,
-            )
-        else:
-            self.embedding_service = StubEmbeddingService()
-            self.llm_client = StubLLMClient()
+        # Usamos SEMPRE o Ollama (removida a condicional dos Stubs antigos)
+        self.embedding_service = OllamaEmbeddingService(
+            base_url=settings.LLM_BASE_URL,
+            model=settings.EMBEDDING_MODEL,
+        )
+        self.llm_client = OllamaLLMClient(
+            base_url=settings.LLM_BASE_URL,
+            model=settings.LLM_MODEL,
+        )
 
         # CONFIGURAÇÃO DO NLP HÍBRIDO
         self.spacy_processor = SpacyNLPProcessor()

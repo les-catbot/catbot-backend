@@ -14,6 +14,8 @@ services:
         condition: service_healthy
       ollama-pull:
         condition: service_completed_successfully
+    # Executa as migrações (cria as tabelas) e depois sobe a API
+    command: sh -c "alembic upgrade head && uvicorn catbot.main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
       - catbot-net
 
@@ -54,8 +56,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    # Modificação: Puxar o modelo de embeddings (nomic) e de LLM (llama3)
-    entrypoint: ["/bin/sh", "-c", "ollama pull nomic-embed-text && ollama pull llama3"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull nomic-embed-text && ollama pull llama3.2:1b"]
     environment:
       OLLAMA_HOST: http://ollama:11434
       PYTHONPATH : /app/src

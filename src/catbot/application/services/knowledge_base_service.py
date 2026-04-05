@@ -125,12 +125,10 @@ class KnowledgeBaseService:
         await self._repo.delete(documento_id)
         logger.info("Documento %s removido.", documento_id)
 
-    async def buscar_similar(
-        self, query: str, top_k: int = 5
-    ) -> list[ChunkDocumento]:
-        """Semantic search: embed the query and return the closest chunks."""
+    async def buscar_similar(self, query: str, categoria: str | None = None, top_k: int = 5) -> list[ChunkDocumento]:
         embeddings = await self._embedding.generate_embeddings([query])
-        return await self._vector.search_similar(embeddings[0], top_k=top_k)
+        # Repassa a variável categoria para o vector repository
+        return await self._vector.search_similar(embeddings[0], categoria=categoria, top_k=top_k)
 
     async def _indexar_versao(
         self,

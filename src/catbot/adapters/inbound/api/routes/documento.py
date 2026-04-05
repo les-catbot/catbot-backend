@@ -11,7 +11,6 @@ from catbot.adapters.inbound.api.schemas.documento import (
     DocumentoDetalheResponse,
     DocumentoResponse,
     IndexacaoResponse,
-    VersaoDocumentoResponse,
 )
 from catbot.application.document_processor import DocumentProcessor
 from catbot.application.services.knowledge_base_service import (
@@ -27,63 +26,46 @@ async def cadastrar_documento(
         titulo: str = Form(...),
         categoria: str = Form(...),
         fonte: str = Form(...),
-        conteudo: str | None = Form(None),
-        arquivo: UploadFile | None = File(None),
+        arquivo: UploadFile = File(...),
         service: KnowledgeBaseService = Depends(get_knowledge_base_service),
 ):
-    """Upload a document (file or raw text) for indexing."""
-    if not conteudo and not arquivo:
+    """Upload de um documento PDF. O texto é extraído automaticamente e indexado."""
+    if not arquivo.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos em formato PDF são permitidos.")
+
+    arquivo_bytes = await arquivo.read()
+
+    # --- EXTRAÇÃO AUTOMÁTICA DE PDF ---
+    try:
+        texto_extraido = DocumentProcessor.extract_text_from_pdf(arquivo_bytes)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Forneça 'conteudo' (texto) ou 'arquivo' (upload).",
+            detail=f"Erro ao tentar ler o PDF: {str(e)}"
         )
 
-    arquivo_bytes: bytes | None = None
-    arquivo_nome: str | None = None
-    texto_final = conteudo or ""
-
-    if arquivo:
-        if not arquivo.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Apenas arquivos em formato PDF são permitidos.")
-
-        arquivo_bytes = await arquivo.read()
-        arquivo_nome = arquivo.filename
-
-        # --- NOVA LÓGICA DE EXTRAÇÃO DE PDF ---
-        try:
-            texto_extraido = DocumentProcessor.extract_text_from_pdf(arquivo_bytes)
-            # Concatena o texto extraído com o conteúdo manual (se o usuário preencheu ambos)
-            texto_final = f"{texto_final}\n\n{texto_extraido}".strip()
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Erro ao tentar ler o PDF: {str(e)}"
-            )
-
-    if not texto_final.strip():
+    if not texto_extraido.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nenhum texto pôde ser extraído. O PDF pode estar vazio ou ser uma imagem (scaneado)."
+            detail="Nenhum texto pôde ser extraído. O PDF pode estar vazio ou ser uma imagem (escaneado sem OCR)."
         )
 
     try:
-        # Passamos o texto_final (que agora tem o texto do PDF) para o service
         doc = await service.cadastrar_documento(
             titulo=titulo,
             categoria=categoria,
             fonte=fonte,
-            conteudo=texto_final,
+            conteudo=texto_extraido,
             arquivo_bytes=arquivo_bytes,
-            arquivo_nome=arquivo_nome,
+            arquivo_nome=arquivo.filename,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    except Exception as exc:  # Trata o seu IndexingError ou qualquer outro erro de negócio
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        )
+    except IndexingError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
-    # Busca a quantidade de chunks gerados no Vector DB para retornar na resposta
     chunks = await service._vector.get_by_documento(doc.id)
 
     return IndexacaoResponse(
@@ -130,36 +112,34 @@ async def obter_documento(
 @router.put("/{documento_id}", response_model=IndexacaoResponse)
 async def atualizar_documento(
     documento_id: UUID,
-    conteudo: str | None = Form(None),
-    arquivo: UploadFile | None = File(None),
+    arquivo: UploadFile = File(...),
     service: KnowledgeBaseService = Depends(get_knowledge_base_service),
 ):
-    """Update document content and re-index."""
-    if not conteudo and not arquivo:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Forneça 'conteudo' (texto) ou 'arquivo' (upload).",
-        )
+    """Atualiza o documento enviando um novo PDF. O texto é re-extraído e re-indexado."""
+    if not arquivo.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos em formato PDF são permitidos.")
 
-    arquivo_bytes: bytes | None = None
-    arquivo_nome: str | None = None
-    if arquivo:
-        arquivo_bytes = await arquivo.read()
-        arquivo_nome = arquivo.filename
+    arquivo_bytes = await arquivo.read()
+
+    try:
+        texto_extraido = DocumentProcessor.extract_text_from_pdf(arquivo_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao tentar ler o PDF: {str(e)}")
+
+    if not texto_extraido.strip():
+        raise HTTPException(status_code=400, detail="Nenhum texto pôde ser extraído do novo PDF.")
 
     try:
         versao = await service.atualizar_documento(
             documento_id=documento_id,
-            conteudo=conteudo,
+            conteudo=texto_extraido,
             arquivo_bytes=arquivo_bytes,
-            arquivo_nome=arquivo_nome,
+            arquivo_nome=arquivo.filename,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except IndexingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        )
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
     doc = await service.obter_documento(documento_id)
     chunks = await service._vector.get_by_documento(documento_id)
@@ -193,7 +173,7 @@ async def busca_semantica(
     body: BuscaSemanticaRequest,
     service: KnowledgeBaseService = Depends(get_knowledge_base_service),
 ):
-    """Semantic search across the knowledge base."""
+    """Busca semântica manual na base de conhecimento."""
     try:
         chunks = await service.buscar_similar(body.query, top_k=body.top_k)
     except Exception as exc:
