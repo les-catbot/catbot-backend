@@ -28,5 +28,8 @@ class EvaluationService:
         )
         return await self._repo.save(avaliacao)
 
+    async def buscar_por_mensagem(self, mensagem_id: UUID) -> list[Avaliacao]:
+        return await self._repo.get_by_mensagem(mensagem_id)
+
     async def listar_avaliacoes(self) -> list[Avaliacao]:
         return await self._repo.list_all()
