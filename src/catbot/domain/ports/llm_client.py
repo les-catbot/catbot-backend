@@ -10,4 +10,5 @@ class LLMResponse:
 
 class LLMClient(ABC):
     @abstractmethod
-    async def generate(self, prompt: str, context: str = "") -> LLMResponse: ...
+    async def generate(self, prompt: str, context: str = "", system_prompt_override: str | None = None) -> LLMResponse:
+        pass

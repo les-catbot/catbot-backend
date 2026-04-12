@@ -9,7 +9,7 @@ class OllamaEmbeddingService(EmbeddingService):
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "nomic-embed-text",
+        model: str = "nomic-embed-text",  # Voltamos ao modelo de grande capacidade
         timeout: float = 120.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
@@ -21,7 +21,11 @@ class OllamaEmbeddingService(EmbeddingService):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(
                 f"{self._base_url}/api/embed",
-                json={"model": self._model, "input": texts},
+                json={
+                    "model": self._model,
+                    "input": texts,
+                    "truncate": True  # Apenas como cinto de segurança
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -34,4 +38,4 @@ class OllamaEmbeddingService(EmbeddingService):
     def dimension(self) -> int:
         if self._dimension is not None:
             return self._dimension
-        return 768
+        return 768  # nomic-embed-text usa dimensão 768

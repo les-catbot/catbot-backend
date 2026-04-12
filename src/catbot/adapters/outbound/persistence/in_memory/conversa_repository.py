@@ -2,6 +2,7 @@ from uuid import UUID
 
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem
+from catbot.domain.entities.resposta import Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 
 
@@ -9,6 +10,7 @@ class InMemoryConversaRepository(ConversaRepository):
     def __init__(self) -> None:
         self._conversas: dict[UUID, Conversa] = {}
         self._mensagens: dict[UUID, list[Mensagem]] = {}
+        self._respostas: dict[UUID, Resposta] = {}
 
     async def get_by_id(self, conversa_id: UUID) -> Conversa | None:
         return self._conversas.get(conversa_id)
@@ -29,4 +31,9 @@ class InMemoryConversaRepository(ConversaRepository):
         return mensagem
 
     async def get_mensagens(self, conversa_id: UUID) -> list[Mensagem]:
+        # Retorna a lista de mensagens atreladas a esta conversa na ordem de inserção
         return list(self._mensagens.get(conversa_id, []))
+
+    async def save_resposta(self, resposta: Resposta) -> Resposta:
+        self._respostas[resposta.id] = resposta
+        return resposta

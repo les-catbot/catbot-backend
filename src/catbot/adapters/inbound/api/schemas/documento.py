@@ -14,17 +14,19 @@ class DocumentoResponse(BaseModel):
     criado_em: datetime
 
 
-class DocumentoDetalheResponse(DocumentoResponse):
-    total_chunks: int
-
-
 class VersaoDocumentoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     documento_id: UUID
     numero_versao: int
+    conteudo: str
     criado_em: datetime
+
+
+class DocumentoDetalheResponse(DocumentoResponse):
+    total_chunks: int
+    versoes: list[VersaoDocumentoResponse]
 
 
 class ChunkResponse(BaseModel):

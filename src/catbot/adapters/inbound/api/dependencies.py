@@ -7,11 +7,14 @@ import uuid
 from catbot.domain.entities.perfil import Perfil
 from catbot.domain.ports.perfil_repository import PerfilRepository
 from catbot.adapters.outbound.persistence.in_memory.perfil_repository import InMemoryPerfilRepository
+from catbot.adapters.outbound.persistence.sqlalchemy.repositories.perfil_repository import SQLAlchemyPerfilRepository
 
 from catbot.adapters.outbound.embedding.ollama_embedding import OllamaEmbeddingService
-from catbot.adapters.outbound.embedding.stub_embedding import StubEmbeddingService
-from catbot.adapters.outbound.llm.stub_client import StubLLMClient
-from catbot.adapters.outbound.nlp.stub_processor import StubNLPProcessor
+from catbot.adapters.outbound.llm.ollama_client import OllamaLLMClient
+
+from catbot.adapters.outbound.nlp.spacy_processor import SpacyNLPProcessor
+from catbot.adapters.outbound.nlp.hybrid_nlp_processor import HybridNLPProcessor
+
 from catbot.adapters.outbound.persistence.in_memory import (
     InMemoryAvaliacaoRepository,
     InMemoryConversaRepository,
@@ -56,10 +59,13 @@ class Container:
             self.documento_repo = InMemoryDocumentoRepository()
             self.avaliacao_repo = InMemoryAvaliacaoRepository()
             self.vector_repo = InMemoryVectorRepository()
+
         elif settings.REPOSITORY_TYPE == "sqlalchemy":
             sf = create_session_factory(
                 settings.DATABASE_URL, echo=settings.DATABASE_ECHO
             )
+
+            self.perfil_repo = SQLAlchemyPerfilRepository(sf)
             self.usuario_repo = SQLAlchemyUsuarioRepository(sf)
             self.conversa_repo = SQLAlchemyConversaRepository(sf)
             self.documento_repo = SQLAlchemyDocumentoRepository(sf)
@@ -70,22 +76,23 @@ class Container:
                 f"Repository type '{settings.REPOSITORY_TYPE}' não suportado."
             )
 
-        if settings.EMBEDDING_TYPE == "ollama":
-            self.embedding_service = OllamaEmbeddingService(
-                base_url=settings.LLM_BASE_URL,
-                model=settings.EMBEDDING_MODEL,
-            )
-        else:
-            self.embedding_service = StubEmbeddingService()
-
-        self.nlp_processor = StubNLPProcessor()
-        self.llm_client = StubLLMClient()
-
-        self.chat_service = ChatService(
-            conversa_repo=self.conversa_repo,
-            nlp_processor=self.nlp_processor,
-            llm_client=self.llm_client,
+        # Usamos SEMPRE o Ollama (removida a condicional dos Stubs antigos)
+        self.embedding_service = OllamaEmbeddingService(
+            base_url=settings.LLM_BASE_URL,
+            model=settings.EMBEDDING_MODEL,
         )
+        self.llm_client = OllamaLLMClient(
+            base_url=settings.LLM_BASE_URL,
+            model=settings.LLM_MODEL,
+        )
+
+        # CONFIGURAÇÃO DO NLP HÍBRIDO
+        self.spacy_processor = SpacyNLPProcessor()
+        self.nlp_processor = HybridNLPProcessor(
+            spacy_processor=self.spacy_processor,
+            llm_client=self.llm_client
+        )
+
         self.knowledge_base_service = KnowledgeBaseService(
             documento_repo=self.documento_repo,
             embedding_service=self.embedding_service,
@@ -93,14 +100,22 @@ class Container:
             chunk_size=settings.CHUNK_SIZE,
             chunk_overlap=settings.CHUNK_OVERLAP,
         )
+
+        self.chat_service = ChatService(
+            conversa_repo=self.conversa_repo,
+            nlp_processor=self.nlp_processor,
+            llm_client=self.llm_client,
+            kb_service=self.knowledge_base_service,
+            rag_top_k=settings.RAG_TOP_K,
+        )
+
         self.history_service = HistoryService(
             conversa_repo=self.conversa_repo,
         )
         self.evaluation_service = EvaluationService(
             avaliacao_repo=self.avaliacao_repo,
         )
-        
-        # Adição do UserService ao container (agora injetando o perfil_repo também)
+
         self.user_service = UserService(
             usuario_repo=self.usuario_repo,
             perfil_repo=self.perfil_repo,

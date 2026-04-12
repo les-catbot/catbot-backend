@@ -150,6 +150,12 @@ def upgrade() -> None:
         sa.Column("criado_em", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
+    op.execute("""
+        INSERT INTO perfil (id, nome, descricao) VALUES
+        ('00000000-0000-0000-0000-000000000001', 'Administrador', 'Acesso total ao sistema'),
+        ('00000000-0000-0000-0000-000000000002', 'Usuário Padrão', 'Acesso comum')
+    """)
+
 
 def downgrade() -> None:
     op.drop_table("chunk_documento")
