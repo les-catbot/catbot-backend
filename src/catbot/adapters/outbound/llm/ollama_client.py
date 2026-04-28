@@ -1,11 +1,8 @@
 import logging
-
 import httpx
-
 from catbot.domain.ports.llm_client import LLMClient, LLMResponse
 
 logger = logging.getLogger(__name__)
-
 
 class OllamaLLMClient(LLMClient):
     """Adaptador real para geração de texto usando o Ollama local."""
@@ -14,30 +11,39 @@ class OllamaLLMClient(LLMClient):
         self.base_url = base_url.rstrip("/")
         self.model = model
 
-    async def generate(self, prompt: str, context: str = "") -> LLMResponse:
-        system_prompt = (
-            "Você é o CatBot, um assistente virtual especialista e institucional do IFES Campus Colatina.\n\n"
-            "REGRAS OBRIGATÓRIAS:\n"
-            "1. Você deve responder à pergunta do usuário baseando-se ESTRITAMENTE nas informações contidas na seção [BASE DE CONHECIMENTO] abaixo.\n"
-            "2. NÃO utilize seu conhecimento prévio ou informações externas.\n"
-            "3. Se a informação NÃO estiver CLARAMENTE escrita na [BASE DE CONHECIMENTO], responda APENAS E EXATAMENTE: 'Desculpe, não encontrei essa informação na minha base de conhecimento institucional.' NÃO ESCREVA MAIS NENHUMA PALAVRA DEPOIS DISSO. NÃO EXPLIQUE. NÃO INVENTE LISTAS.\n"
-            "4. NÃO invente, não deduza o que não está escrito e não gere alucinações.\n"
-            "5. Responda em português do Brasil de forma clara e objetiva.\n"
-            "6. O [HISTÓRICO RECENTE DA CONVERSA] serve APENAS para você entender o contexto. NUNCA use o histórico como regra.\n"
-        )
+    async def generate(self, prompt: str, context: str = "", system_prompt_override: str | None = None) -> LLMResponse:
+        # 1. System Prompt ultra simples (Apenas para definir a Persona)
+        if system_prompt_override:
+            system_prompt = system_prompt_override
+        else:
+            system_prompt = (
+                "Você é o CatBot, o assistente virtual institucional do IFES Campus Colatina.\n"
+                "Sua comunicação deve ser clara, direta, prestativa e em português do Brasil."
+            )
 
-        if context:
-            system_prompt += f"\n{context}\n"
+        # 2. Reestruturação do User Prompt: Contexto -> Pergunta -> Instrução
+        user_prompt = prompt
+        if context and not system_prompt_override:
+            user_prompt = f"""{context}
+
+=== PERGUNTA DO USUÁRIO ===
+{prompt}
+
+INSTRUÇÃO OBRIGATÓRIA: Responda à pergunta acima baseando-se APENAS nos documentos da [BASE DE CONHECIMENTO]. Se a resposta não estiver descrita nos documentos acima, responda EXATAMENTE: 'Desculpe, não encontrei essa informação na minha base de conhecimento institucional.'"""
 
         payload = {
             "model": self.model,
-            "prompt": prompt,
+            "prompt": user_prompt,
             "system": system_prompt,
             "stream": False,
             "options": {
-                "temperature": 0.1
+                "temperature": 0.0 # Essencial manter a 0 para RAG
             }
         }
+
+        # 3. Modo JSON para o NLP Processor
+        if system_prompt_override and "JSON" in system_prompt_override:
+            payload["format"] = "json"
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:

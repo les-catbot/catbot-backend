@@ -21,7 +21,7 @@ class SpacyNLPProcessor(NLPProcessor):
         # 2. Reconhecimento de Entidades Nomeadas (NER) genéricas
         entidades = {ent.text: ent.label_ for ent in doc.ents}
 
-        # Retorna o resultado preliminar (Sem a intenção, pois o Híbrido vai preencher)
+
         return NLPResult(
             texto_normalizado=texto_normalizado,
             tokens=tokens,

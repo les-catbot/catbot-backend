@@ -26,7 +26,7 @@ class ChatService:
         nlp_processor: NLPProcessor,
         llm_client: LLMClient,
         kb_service: KnowledgeBaseService,
-        rag_top_k: int = 4, # Reduzido para 4 para manter o LLM focado
+        rag_top_k: int = 3, # Reduzido para 4 para manter o LLM focado
     ) -> None:
         self._conversa_repo = conversa_repo
         self._nlp = nlp_processor
@@ -121,10 +121,9 @@ class ChatService:
 
             print(f"\n[DEBUG LLM] === CONTEXTO ENVIADO PARA A IA LER ===\n{context}\n{'=' * 50}\n")
 
-            # Customiza o prompt dependendo da intenção para maior precisão
-            prompt_final = f"Com base na [BASE DE CONHECIMENTO], responda: {msg_usuario.conteudo}"
-            if categoria_filtro == "ROD":
-                prompt_final = f"Com base nas normativas estudantis do ROD na [BASE DE CONHECIMENTO], responda: {msg_usuario.conteudo}"
+            # Agora o prompt final é apenas a pergunta do utilizador,
+            # pois as regras e o encapsulamento estão a ser feitos no ollama_client.py
+            prompt_final = msg_usuario.conteudo
 
             llm_response = await self._llm.generate(
                 prompt=prompt_final,
