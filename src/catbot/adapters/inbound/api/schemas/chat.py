@@ -17,3 +17,9 @@ class PerguntaResponse(BaseModel):
     resposta: str
     confianca: float
     mensagem_id: UUID
+    fontes: list[FonteResponse] = []
+
+
+class FonteResponse(BaseModel):
+    documento_id: UUID # Ou string, dependendo de como você mapeia o chunk.fonte
+    trecho: str

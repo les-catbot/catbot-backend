@@ -47,8 +47,13 @@ class HybridNLPProcessor(NLPProcessor):
         spacy_result = await self._spacy.process(texto)
 
         # 2. Avaliação de Intenção pelo LLM
-        prompt_final = f"{PROMPT_SISTEMA_INTENCAO}\n\nPergunta: \"{texto}\"\nSaída:"
-        resposta_llm = await self._llm.generate(prompt=prompt_final)
+        prompt_usuario = f"Pergunta: \"{texto}\"\nSaída:"
+
+        # Passamos o PROMPT_SISTEMA_INTENCAO como override para o cliente não o confundir com o ChatBot
+        resposta_llm = await self._llm.generate(
+            prompt=prompt_usuario,
+            system_prompt_override=PROMPT_SISTEMA_INTENCAO
+        )
 
         texto_resposta = resposta_llm.texto.strip()
         intencao = "SAUDACAO_OU_OUTROS"
@@ -66,7 +71,6 @@ class HybridNLPProcessor(NLPProcessor):
         except json.JSONDecodeError:
             print(f"Erro ao parsear JSON retornado pelo LLM: {texto_resposta}")
 
-        # 3. Mesclar as entidades (As do modelo SpaCy com as de negócio do LLM)
         entidades_combinadas = {**spacy_result.entidades, **entidades_llm}
 
         return NLPResult(
