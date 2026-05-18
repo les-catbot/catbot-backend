@@ -42,11 +42,12 @@ class UsuarioModel(Base):
     nome: Mapped[str] = mapped_column()
     email: Mapped[str] = mapped_column(unique=True)
     senha_hash: Mapped[str] = mapped_column()
-    perfil_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("perfil.id"))  # Removido nullable=True para ser obrigatório
+    perfil_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("perfil.id"))
     criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relação N:1 (Um Usuário pertence a um perfil)
     perfil: Mapped["PerfilModel"] = relationship(back_populates="usuarios", lazy="joined")
+
 
 class ConversaModel(Base):
     __tablename__ = "conversa"
@@ -76,9 +77,7 @@ class ProcessamentoPerguntaModel(Base):
     mensagem_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("mensagem.id"))
     texto_normalizado: Mapped[str] = mapped_column(Text)
     tokens: Mapped[str] = mapped_column(Text)
-    intencao_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("intencao.id"), nullable=True
-    )
+    intencao_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("intencao.id"), nullable=True)
     criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -94,21 +93,9 @@ class EntidadeExtraidaModel(Base):
     __tablename__ = "entidade_extraida"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    processamento_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("processamento_pergunta.id")
-    )
+    processamento_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("processamento_pergunta.id"))
     nome_entidade: Mapped[str] = mapped_column()
     valor_entidade: Mapped[str] = mapped_column()
-
-
-class RespostaModel(Base):
-    __tablename__ = "resposta"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    mensagem_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("mensagem.id"))
-    texto_resposta: Mapped[str] = mapped_column(Text)
-    pontuacao_confianca: Mapped[float] = mapped_column(Float, default=0.0)
-    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DocumentoModel(Base):
@@ -131,6 +118,19 @@ class VersaoDocumentoModel(Base):
     criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RespostaModel(Base):
+    __tablename__ = "resposta"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    mensagem_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("mensagem.id"))
+    texto_resposta: Mapped[str] = mapped_column(Text)
+    pontuacao_confianca: Mapped[float] = mapped_column(Float, default=0.0)
+    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relação 1:N (Uma resposta tem várias fontes)
+    fontes: Mapped[list["FonteRespostaModel"]] = relationship(back_populates="resposta")
+
+
 class FonteRespostaModel(Base):
     __tablename__ = "fonte_resposta"
 
@@ -138,6 +138,9 @@ class FonteRespostaModel(Base):
     resposta_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("resposta.id"))
     documento_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("documento.id"))
     trecho: Mapped[str] = mapped_column(Text)
+
+    # Relação N:1 (Várias fontes pertencem a uma resposta)
+    resposta: Mapped["RespostaModel"] = relationship(back_populates="fontes")
 
 
 class AvaliacaoModel(Base):

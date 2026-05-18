@@ -9,8 +9,8 @@ class OllamaEmbeddingService(EmbeddingService):
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "mxbai-embed-large",  # Atualizado para o modelo recomendado
-        timeout: float = 600.0, # Aumentado de 120s para 600s (10 minutos)
+        model: str = "mxbai-embed-large",
+        timeout: float = 600.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -18,14 +18,13 @@ class OllamaEmbeddingService(EmbeddingService):
         self._dimension: int | None = None
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        # O timeout maior permite que computadores mais lentos processem PDFs grandes
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(
                 f"{self._base_url}/api/embed",
                 json={
                     "model": self._model,
                     "input": texts,
-                    "truncate": True  # Apenas como cinto de segurança
+                    "truncate": True
                 },
             )
             response.raise_for_status()

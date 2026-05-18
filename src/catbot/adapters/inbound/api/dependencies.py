@@ -32,13 +32,21 @@ from catbot.adapters.outbound.persistence.sqlalchemy.repositories import (
     SQLAlchemyUsuarioRepository,
     SQLAlchemyVectorRepository,
 )
+
+# Serviços da Aplicação
 from catbot.application.services.chat_service import ChatService
 from catbot.application.services.evaluation_service import EvaluationService
 from catbot.application.services.history_service import HistoryService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.application.services.user_service import UserService
-from catbot.config import get_settings
 from catbot.application.services.auth_service import AuthService
+
+# === NOVOS SERVIÇOS IMPORTADOS AQUI ===
+from catbot.application.services.export_service import ExportService
+from catbot.application.services.metrics_service import MetricsService
+
+from catbot.config import get_settings
+
 
 class Container:
     """Poor-man's DI container. Troca fácil entre in-memory e SQLAlchemy."""
@@ -124,6 +132,16 @@ class Container:
             usuario_repo=self.usuario_repo
         )
 
+        # === INSTÂNCIA DOS NOVOS SERVIÇOS ===
+        self.export_service = ExportService(
+            history_service=self.history_service,
+            conversa_repo=self.conversa_repo
+        )
+
+        self.metrics_service = MetricsService(
+            conversa_repo=self.conversa_repo
+        )
+
 
 _container: Container | None = None
 
@@ -159,3 +177,13 @@ def get_perfil_repository() -> PerfilRepository:
 
 def get_auth_service() -> AuthService:
     return get_container().auth_service
+
+# === FUNÇÕES DE ACESSO AOS NOVOS SERVIÇOS ===
+def get_export_service() -> ExportService:
+    return get_container().export_service
+
+def get_metrics_service() -> MetricsService:
+    return get_container().metrics_service
+
+def get_conversa_repository():
+    return get_container().conversa_repo
