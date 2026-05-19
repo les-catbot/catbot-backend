@@ -2,7 +2,7 @@ from uuid import UUID
 
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem
-from catbot.domain.entities.resposta import Resposta
+from catbot.domain.entities.resposta import FonteResposta, Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 
 
@@ -11,6 +11,7 @@ class InMemoryConversaRepository(ConversaRepository):
         self._conversas: dict[UUID, Conversa] = {}
         self._mensagens: dict[UUID, list[Mensagem]] = {}
         self._respostas: dict[UUID, Resposta] = {}
+        self._fontes: dict[UUID, list[FonteResposta]] = {}
 
     async def get_by_id(self, conversa_id: UUID) -> Conversa | None:
         return self._conversas.get(conversa_id)
@@ -37,3 +38,19 @@ class InMemoryConversaRepository(ConversaRepository):
     async def save_resposta(self, resposta: Resposta) -> Resposta:
         self._respostas[resposta.id] = resposta
         return resposta
+
+    async def add_fonte_resposta(self, fonte: FonteResposta) -> FonteResposta:
+        self._fontes.setdefault(fonte.resposta_id, []).append(fonte)
+        return fonte
+
+    async def get_fontes_por_mensagem(self, mensagem_id: UUID) -> list[FonteResposta]:
+        resposta = next(
+            (r for r in self._respostas.values() if r.mensagem_id == mensagem_id),
+            None,
+        )
+        if resposta is None:
+            return []
+        return list(self._fontes.get(resposta.id, []))
+
+    async def list_all(self) -> list[Conversa]:
+        return list(self._conversas.values())

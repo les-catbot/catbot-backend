@@ -12,7 +12,6 @@ class OllamaLLMClient(LLMClient):
         self.model = model
 
     async def generate(self, prompt: str, context: str = "", system_prompt_override: str | None = None) -> LLMResponse:
-        # 1. System Prompt ultra simples (Apenas para definir a Persona)
         if system_prompt_override:
             system_prompt = system_prompt_override
         else:
@@ -37,11 +36,10 @@ INSTRUÇÃO OBRIGATÓRIA: Responda à pergunta acima baseando-se APENAS nos docu
             "system": system_prompt,
             "stream": False,
             "options": {
-                "temperature": 0.0 # Essencial manter a 0 para RAG
+                "temperature": 0.0
             }
         }
 
-        # 3. Modo JSON para o NLP Processor
         if system_prompt_override and "JSON" in system_prompt_override:
             payload["format"] = "json"
 

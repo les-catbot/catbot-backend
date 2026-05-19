@@ -1,5 +1,13 @@
+import os
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+os.environ["REPOSITORY_TYPE"] = "memory"
+os.environ["LLM_PROVIDER"] = "stub"
+os.environ["EMBEDDING_PROVIDER"] = "stub"
+os.environ["EMBEDDING_TYPE"] = "stub"
+os.environ["OPENAI_API_KEY"] = "test-key"
 
 from catbot.adapters.inbound.api import dependencies as deps
 from catbot.adapters.inbound.api.dependencies import Container

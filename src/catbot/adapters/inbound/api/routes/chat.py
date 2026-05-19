@@ -1,18 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""Rotas do chat."""
+
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from catbot.adapters.inbound.api.dependencies import get_chat_service
 from catbot.adapters.inbound.api.schemas.chat import (
+    NovaConversaRequest,
+    NovaConversaResponse,
     PerguntaRequest,
     PerguntaResponse,
-    NovaConversaRequest, # Nova importação
-    NovaConversaResponse # Nova importação
+    FonteResponse
 )
 from catbot.application.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# NOVA ROTA PARA CRIAR O ID DA CONVERSA
-@router.post("/iniciar", response_model=NovaConversaResponse)
+@router.post("/iniciar", response_model=NovaConversaResponse, status_code=status.HTTP_201_CREATED)
 async def iniciar_conversa(
     body: NovaConversaRequest,
     service: ChatService = Depends(get_chat_service),
@@ -32,10 +34,19 @@ async def perguntar(
             texto_usuario=body.texto,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+
+    # Convertendo as entidades de domínio (FonteResposta) para schemas da API (FonteResponse)
+    fontes_formatadas = [
+        FonteResponse(documento_id=f.documento_id, trecho=f.trecho)
+        for f in result.fontes
+    ]
 
     return PerguntaResponse(
         resposta=result.resposta,
         confianca=result.confianca,
         mensagem_id=result.mensagem_id,
+        fontes=fontes_formatadas
     )

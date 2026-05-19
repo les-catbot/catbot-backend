@@ -1,15 +1,15 @@
 """Caso de uso: Realizar Pergunta em Linguagem Natural com Histórico (Memória)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
+from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem, StatusValidacao, TipoRemetente
-from catbot.domain.entities.resposta import Resposta
+from catbot.domain.entities.resposta import FonteResposta, Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 from catbot.domain.ports.llm_client import LLMClient
 from catbot.domain.ports.nlp_processor import NLPProcessor
-from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 
 
 @dataclass
@@ -17,6 +17,7 @@ class ChatResult:
     resposta: str
     confianca: float
     mensagem_id: UUID
+    fontes: list[FonteResposta] = field(default_factory=list)
 
 
 class ChatService:
@@ -26,7 +27,7 @@ class ChatService:
         nlp_processor: NLPProcessor,
         llm_client: LLMClient,
         kb_service: KnowledgeBaseService,
-        rag_top_k: int = 3, # Reduzido para 4 para manter o LLM focado
+        rag_top_k: int = 3,
     ) -> None:
         self._conversa_repo = conversa_repo
         self._nlp = nlp_processor
@@ -39,16 +40,22 @@ class ChatService:
         nova_conversa = Conversa(usuario_id=usuario_id)
         return await self._conversa_repo.save(nova_conversa)
 
-    def _montar_contexto(self, chunks_relevantes: list, ultimas_mensagens: list, intencao: str) -> str:
-        """Função auxiliar para organizar visualmente o contexto para o LLM."""
-        context_parts = []
-        context_parts.append(f"Intenção detectada da pergunta: {intencao}")
+    def _montar_contexto(
+        self,
+        chunks_relevantes: list,
+        ultimas_mensagens: list,
+        intencao: str,
+    ) -> str:
+        """Organiza visualmente o contexto para o LLM ler."""
+        context_parts = [f"Intenção detectada da pergunta: {intencao}"]
 
-        # Histórico Blindado: Apenas as últimas perguntas do usuário para evitar envenenamento (alucinação)
-        mensagens_usuario = [m for m in ultimas_mensagens if m.tipo_remetente == TipoRemetente.USUARIO]
+        # Histórico Blindado
+        mensagens_usuario = [
+            m for m in ultimas_mensagens if m.tipo_remetente == TipoRemetente.USUARIO
+        ]
         if mensagens_usuario:
             hist_str = "=== [HISTÓRICO RECENTE DE PERGUNTAS DO USUÁRIO] ===\n"
-            for m in mensagens_usuario[-3:]: # Mantém apenas as 3 últimas perguntas
+            for m in mensagens_usuario[-3:]:
                 hist_str += f"Usuário perguntou: {m.conteudo}\n"
             context_parts.append(hist_str)
 
@@ -57,7 +64,10 @@ class ChatService:
             for i, chunk in enumerate(chunks_relevantes, 1):
                 docs_str += f"--- Documento {i} (Fonte: {chunk.fonte}) ---\n{chunk.conteudo}\n\n"
         else:
-            docs_str += "Nenhuma informação relevante encontrada na base de dados para esta pergunta.\n"
+            docs_str += (
+                "Nenhuma informação relevante encontrada na base de dados para esta "
+                "pergunta.\n"
+            )
 
         context_parts.append(docs_str)
         return "\n\n".join(context_parts)
@@ -66,7 +76,6 @@ class ChatService:
         if not texto_usuario or not texto_usuario.strip():
             raise ValueError("A pergunta não pode estar vazia.")
 
-        # 1. Salva a mensagem do usuário
         msg_usuario = Mensagem(
             conversa_id=conversa_id,
             conteudo=texto_usuario.strip(),
@@ -75,62 +84,39 @@ class ChatService:
         )
         msg_usuario = await self._conversa_repo.add_mensagem(msg_usuario)
 
-        # 2. Recupera o histórico
         todas_mensagens = await self._conversa_repo.get_mensagens(conversa_id)
         historico_passado = [m for m in todas_mensagens if m.id != msg_usuario.id]
 
-        # 3. Processamento de Linguagem Natural (NLP)
         nlp_result = await self._nlp.process(msg_usuario.conteudo)
-
         intencao = nlp_result.intencao
         query_busca = msg_usuario.conteudo.strip()
+        chunks_relevantes = []
 
-        print(f"\n{'=' * 50}")
-        print(f"[DEBUG NLP] Intenção detectada: {intencao}")
-        print(f"[DEBUG RAG] Query Vetorial: {query_busca}")
-
-        # 4. ROTEAMENTO SEMÂNTICO
         if intencao == "SAUDACAO_OU_OUTROS":
             llm_response = await self._llm.generate(
                 prompt=msg_usuario.conteudo,
-                context="Intenção: SAUDACAO_OU_OUTROS. Aja como o CatBot, cumprimente o usuário e pergunte como pode ajudar com as normativas do IFES."
+                system_prompt_override=(
+                    "Você é o CatBot, o assistente virtual institucional do IFES "
+                    "Campus Colatina. Cumprimente o usuário em português do Brasil "
+                    "e ofereça ajuda sobre documentos institucionais."
+                ),
             )
-
         else:
-            # Mapeia a intenção para a categoria salva no banco
-            categoria_filtro = None
-            if intencao == "DUVIDA_ROD":
-                categoria_filtro = "ROD"
-            elif intencao == "DUVIDA_PORTARIA":
-                categoria_filtro = "PORTARIA"
-            elif intencao == "DUVIDA_RESOLUCAO":
-                categoria_filtro = "RESOLUCAO"
+            categoria_filtro = {
+                "DUVIDA_ROD": "ROD",
+                "DUVIDA_PORTARIA": "PORTARIA",
+                "DUVIDA_RESOLUCAO": "RESOLUCAO",
+            }.get(intencao)
 
-            print(f"[DEBUG RAG] Buscando apenas na Categoria: {categoria_filtro}")
-
-            # Busca no banco vetorial passando a categoria
             chunks_relevantes = await self._kb.buscar_similar(
                 query=query_busca,
                 categoria=categoria_filtro,
                 top_k=self._rag_top_k
             )
-
-            print(f"[DEBUG RAG] Encontrou {len(chunks_relevantes)} pedaços de texto.")
-
             context = self._montar_contexto(chunks_relevantes, historico_passado, intencao)
 
-            print(f"\n[DEBUG LLM] === CONTEXTO ENVIADO PARA A IA LER ===\n{context}\n{'=' * 50}\n")
+            llm_response = await self._llm.generate(prompt=msg_usuario.conteudo, context=context)
 
-            # Agora o prompt final é apenas a pergunta do utilizador,
-            # pois as regras e o encapsulamento estão a ser feitos no ollama_client.py
-            prompt_final = msg_usuario.conteudo
-
-            llm_response = await self._llm.generate(
-                prompt=prompt_final,
-                context=context,
-            )
-
-        # 5. Salva e retorna a resposta gerada
         msg_bot = Mensagem(
             conversa_id=conversa_id,
             conteudo=llm_response.texto,
@@ -146,8 +132,21 @@ class ChatService:
         )
         await self._conversa_repo.save_resposta(resposta)
 
+        fontes_salvas = []
+        if chunks_relevantes:
+            for chunk in chunks_relevantes:
+                fonte = FonteResposta(
+                    resposta_id=resposta.id,
+                    documento_id=chunk.documento_id,
+                    trecho=chunk.conteudo
+                )
+                if hasattr(self._conversa_repo, 'add_fonte_resposta'):
+                    await self._conversa_repo.add_fonte_resposta(fonte)
+                fontes_salvas.append(fonte)
+
         return ChatResult(
             resposta=llm_response.texto,
             confianca=llm_response.confianca,
             mensagem_id=msg_bot.id,
+            fontes=fontes_salvas
         )

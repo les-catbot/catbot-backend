@@ -33,11 +33,18 @@ class InMemoryVectorRepository(VectorRepository):
         return len(to_delete)
 
     async def search_similar(
-        self, query_embedding: list[float], top_k: int = 5
+        self,
+        query_embedding: list[float],
+        categoria: str | None = None,
+        top_k: int = 5,
     ) -> list[ChunkDocumento]:
+        chunks = self._chunks.values()
+        if categoria:
+            chunks = [chunk for chunk in chunks if chunk.categoria == categoria]
+
         scored = [
             (c, _cosine_similarity(query_embedding, c.embedding))
-            for c in self._chunks.values()
+            for c in chunks
         ]
         scored.sort(key=lambda x: x[1], reverse=True)
         return [c for c, _ in scored[:top_k]]
