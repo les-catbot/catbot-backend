@@ -47,6 +47,19 @@ class IndexacaoResponse(BaseModel):
     total_chunks: int
 
 
+class DocumentoReindexadoResponse(BaseModel):
+    documento_id: UUID
+    versao_id: UUID
+    total_chunks: int
+
+
+class ReindexacaoResponse(BaseModel):
+    mensagem: str
+    total_documentos: int
+    total_chunks: int
+    documentos: list[DocumentoReindexadoResponse]
+
+
 class BuscaSemanticaRequest(BaseModel):
     query: str = Field(..., min_length=1)
     top_k: int = Field(default=5, ge=1, le=50)

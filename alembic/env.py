@@ -4,11 +4,12 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from alembic import context
 from catbot.adapters.outbound.persistence.sqlalchemy.models import Base
+from catbot.config import get_settings
 
 config = context.config
 if config.config_file_name is not None:
@@ -22,8 +23,11 @@ def get_url() -> str:
     if not url:
         url = config.get_main_option("sqlalchemy.url", "")
     if not url:
+        url = get_settings().DATABASE_URL
+    if not url:
         raise RuntimeError(
-            "DATABASE_URL não definida. Exporte a variável ou configure alembic.ini."
+            "DATABASE_URL não definida. Configure a variável no .env, exporte no "
+            "terminal ou configure alembic.ini."
         )
     return url
 

@@ -3,13 +3,13 @@
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem, StatusValidacao, TipoRemetente
-from catbot.domain.entities.resposta import Resposta, FonteResposta
+from catbot.domain.entities.resposta import FonteResposta, Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 from catbot.domain.ports.llm_client import LLMClient
 from catbot.domain.ports.nlp_processor import NLPProcessor
-from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 
 
 @dataclass
@@ -40,12 +40,19 @@ class ChatService:
         nova_conversa = Conversa(usuario_id=usuario_id)
         return await self._conversa_repo.save(nova_conversa)
 
-    def _montar_contexto(self, chunks_relevantes: list, ultimas_mensagens: list, intencao: str) -> str:
+    def _montar_contexto(
+        self,
+        chunks_relevantes: list,
+        ultimas_mensagens: list,
+        intencao: str,
+    ) -> str:
         """Organiza visualmente o contexto para o LLM ler."""
         context_parts = [f"Intenção detectada da pergunta: {intencao}"]
 
         # Histórico Blindado
-        mensagens_usuario = [m for m in ultimas_mensagens if m.tipo_remetente == TipoRemetente.USUARIO]
+        mensagens_usuario = [
+            m for m in ultimas_mensagens if m.tipo_remetente == TipoRemetente.USUARIO
+        ]
         if mensagens_usuario:
             hist_str = "=== [HISTÓRICO RECENTE DE PERGUNTAS DO USUÁRIO] ===\n"
             for m in mensagens_usuario[-3:]:
@@ -57,7 +64,10 @@ class ChatService:
             for i, chunk in enumerate(chunks_relevantes, 1):
                 docs_str += f"--- Documento {i} (Fonte: {chunk.fonte}) ---\n{chunk.conteudo}\n\n"
         else:
-            docs_str += "Nenhuma informação relevante encontrada na base de dados para esta pergunta.\n"
+            docs_str += (
+                "Nenhuma informação relevante encontrada na base de dados para esta "
+                "pergunta.\n"
+            )
 
         context_parts.append(docs_str)
         return "\n\n".join(context_parts)
@@ -85,10 +95,18 @@ class ChatService:
         if intencao == "SAUDACAO_OU_OUTROS":
             llm_response = await self._llm.generate(
                 prompt=msg_usuario.conteudo,
-                context="Intenção: SAUDACAO_OU_OUTROS. Aja como o CatBot, cumprimente e ofereça ajuda."
+                system_prompt_override=(
+                    "Você é o CatBot, o assistente virtual institucional do IFES "
+                    "Campus Colatina. Cumprimente o usuário em português do Brasil "
+                    "e ofereça ajuda sobre documentos institucionais."
+                ),
             )
         else:
-            categoria_filtro = {"DUVIDA_ROD": "ROD", "DUVIDA_PORTARIA": "PORTARIA", "DUVIDA_RESOLUCAO": "RESOLUCAO"}.get(intencao)
+            categoria_filtro = {
+                "DUVIDA_ROD": "ROD",
+                "DUVIDA_PORTARIA": "PORTARIA",
+                "DUVIDA_RESOLUCAO": "RESOLUCAO",
+            }.get(intencao)
 
             chunks_relevantes = await self._kb.buscar_similar(
                 query=query_busca,

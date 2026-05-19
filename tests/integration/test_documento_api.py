@@ -1,6 +1,5 @@
 """Testes de integração para os endpoints de documento."""
 
-import pytest
 from httpx import AsyncClient
 
 
@@ -102,7 +101,11 @@ class TestDocumentoEndpoints:
                 "titulo": "Vacinação",
                 "categoria": "Saúde",
                 "fonte": "vet.com",
-                "conteudo": "Gatos devem ser vacinados anualmente contra raiva e outras doenças. " * 10,
+                "conteudo": (
+                    "Gatos devem ser vacinados anualmente contra raiva e outras "
+                    "doenças. "
+                )
+                * 10,
             },
         )
         response = await client.post(

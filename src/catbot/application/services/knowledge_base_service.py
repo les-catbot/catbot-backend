@@ -1,6 +1,7 @@
 """Caso de uso: Gerenciar Base de Conhecimento com indexação vetorial."""
 
 import logging
+from dataclasses import dataclass
 from uuid import UUID
 
 from catbot.application.text_processing import chunk_text, extract_text
@@ -15,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 class IndexingError(Exception):
     """Raised when the indexing pipeline fails and the operation is rolled back."""
+
+
+@dataclass
+class ReindexacaoDocumento:
+    documento_id: UUID
+    versao_id: UUID
+    total_chunks: int
+
+
+@dataclass
+class ReindexacaoResultado:
+    total_documentos: int
+    total_chunks: int
+    documentos: list[ReindexacaoDocumento]
 
 
 class KnowledgeBaseService:
@@ -110,7 +125,11 @@ class KnowledgeBaseService:
                 f"Falha ao re-indexar documento {documento_id}: {exc}"
             ) from exc
 
-        logger.info("Documento %s atualizado para versão %d.", documento_id, nova_versao.numero_versao)
+        logger.info(
+            "Documento %s atualizado para versão %d.",
+            documento_id,
+            nova_versao.numero_versao,
+        )
         return nova_versao
 
     async def listar_documentos(self) -> list[Documento]:
@@ -125,10 +144,65 @@ class KnowledgeBaseService:
         await self._repo.delete(documento_id)
         logger.info("Documento %s removido.", documento_id)
 
-    async def buscar_similar(self, query: str, categoria: str | None = None, top_k: int = 5) -> list[ChunkDocumento]:
+    async def buscar_similar(
+        self,
+        query: str,
+        categoria: str | None = None,
+        top_k: int = 5,
+    ) -> list[ChunkDocumento]:
         embeddings = await self._embedding.generate_embeddings([query])
+        if not embeddings:
+            raise ValueError("Nenhum embedding gerado para a busca.")
+        self._validar_dimensoes(embeddings)
         # Repassa a variável categoria para o vector repository
         return await self._vector.search_similar(embeddings[0], categoria=categoria, top_k=top_k)
+
+    async def reindexar_documentos(
+        self,
+        documento_id: UUID | None = None,
+    ) -> ReindexacaoResultado:
+        """Rebuild stored vectors from the latest document versions."""
+        if documento_id is not None:
+            doc = await self._repo.get_by_id(documento_id)
+            if doc is None:
+                raise ValueError("Documento não encontrado.")
+            documentos = [doc]
+        else:
+            documentos = await self._repo.list_all()
+
+        reindexados: list[ReindexacaoDocumento] = []
+        total_chunks = 0
+
+        for doc in documentos:
+            versoes = await self._repo.get_versoes(doc.id)
+            if not versoes:
+                logger.warning("Documento %s sem versões; reindexação ignorada.", doc.id)
+                continue
+
+            versao = max(versoes, key=lambda item: item.numero_versao)
+            chunks = await self._gerar_chunks_indexados(
+                doc=doc,
+                versao=versao,
+                categoria=doc.categoria,
+                fonte=doc.fonte,
+            )
+            await self._vector.delete_by_documento(doc.id)
+            await self._vector.save_chunks(chunks)
+
+            reindexados.append(
+                ReindexacaoDocumento(
+                    documento_id=doc.id,
+                    versao_id=versao.id,
+                    total_chunks=len(chunks),
+                )
+            )
+            total_chunks += len(chunks)
+
+        return ReindexacaoResultado(
+            total_documentos=len(reindexados),
+            total_chunks=total_chunks,
+            documentos=reindexados,
+        )
 
     async def _indexar_versao(
         self,
@@ -137,6 +211,22 @@ class KnowledgeBaseService:
         categoria: str,
         fonte: str,
     ) -> None:
+        chunk_entities = await self._gerar_chunks_indexados(
+            doc=doc,
+            versao=versao,
+            categoria=categoria,
+            fonte=fonte,
+        )
+
+        await self._vector.save_chunks(chunk_entities)
+
+    async def _gerar_chunks_indexados(
+        self,
+        doc: Documento,
+        versao: VersaoDocumento,
+        categoria: str,
+        fonte: str,
+    ) -> list[ChunkDocumento]:
         chunks_text = chunk_text(
             versao.conteudo,
             chunk_size=self._chunk_size,
@@ -146,8 +236,13 @@ class KnowledgeBaseService:
             raise ValueError("Nenhum chunk gerado a partir do conteúdo.")
 
         embeddings = await self._embedding.generate_embeddings(chunks_text)
+        self._validar_dimensoes(embeddings)
+        if len(embeddings) != len(chunks_text):
+            raise ValueError(
+                "Quantidade de embeddings diferente da quantidade de chunks gerados."
+            )
 
-        chunk_entities = [
+        return [
             ChunkDocumento(
                 documento_id=doc.id,
                 versao_id=versao.id,
@@ -160,7 +255,18 @@ class KnowledgeBaseService:
             for idx, (text, emb) in enumerate(zip(chunks_text, embeddings))
         ]
 
-        await self._vector.save_chunks(chunk_entities)
+    def _validar_dimensoes(self, embeddings: list[list[float]]) -> None:
+        expected_dimension = self._embedding.dimension()
+        invalid = [
+            len(embedding)
+            for embedding in embeddings
+            if len(embedding) != expected_dimension
+        ]
+        if invalid:
+            raise ValueError(
+                "Dimensão de embedding inválida: "
+                f"esperado {expected_dimension}, recebido {invalid[0]}."
+            )
 
     async def _rollback_documento(self, documento_id: UUID) -> None:
         """Best-effort cleanup: remove the document and any partial vectors."""

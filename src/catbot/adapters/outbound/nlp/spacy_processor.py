@@ -1,4 +1,5 @@
 import spacy
+
 from catbot.domain.ports.nlp_processor import NLPProcessor, NLPResult
 
 
@@ -8,7 +9,9 @@ class SpacyNLPProcessor(NLPProcessor):
             self.nlp = spacy.load(model_name)
         except OSError:
             import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", model_name])
+            import sys
+
+            subprocess.run([sys.executable, "-m", "spacy", "download", model_name], check=True)
             self.nlp = spacy.load(model_name)
 
     async def process(self, texto: str) -> NLPResult:

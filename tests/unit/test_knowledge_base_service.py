@@ -149,6 +149,36 @@ class TestBuscaSimilar:
         assert len(results) > 0
 
 
+class TestReindexacao:
+    async def test_reindexar_reconstroi_chunks_sem_apagar_documento(
+        self,
+        service,
+        doc_repo,
+        vector_repo,
+    ):
+        doc = await service.cadastrar_documento(
+            titulo="Norma",
+            categoria="ROD",
+            fonte="ifes.edu.br",
+            conteudo="Texto normativo com conteúdo suficiente para gerar chunks. " * 10,
+        )
+        await vector_repo.delete_by_documento(doc.id)
+
+        resultado = await service.reindexar_documentos()
+        chunks = await vector_repo.get_by_documento(doc.id)
+
+        assert resultado.total_documentos == 1
+        assert resultado.total_chunks == len(chunks)
+        assert chunks
+        assert await doc_repo.get_by_id(doc.id) is not None
+
+    async def test_reindexar_documento_inexistente_falha(self, service):
+        from uuid import uuid4
+
+        with pytest.raises(ValueError, match="não encontrado"):
+            await service.reindexar_documentos(documento_id=uuid4())
+
+
 class TestRollbackOnFailure:
     async def test_rollback_quando_embedding_falha(self, doc_repo, vector_repo):
         class FailingEmbedding(EmbeddingService):
