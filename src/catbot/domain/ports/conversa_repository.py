@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
+
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem
-from catbot.domain.entities.resposta import Resposta, FonteResposta  # Adicione esta importação
+from catbot.domain.entities.processamento import EntidadeExtraida, ProcessamentoPergunta
+from catbot.domain.entities.resposta import FonteResposta, Resposta
+
 
 class ConversaRepository(ABC):
     @abstractmethod
@@ -24,16 +27,34 @@ class ConversaRepository(ABC):
     async def save_resposta(self, resposta: Resposta) -> Resposta: ...
 
     @abstractmethod
+    async def save_processamento(
+        self,
+        processamento: ProcessamentoPergunta,
+        entidades: list[EntidadeExtraida],
+        intencao_nome: str | None = None,
+    ) -> ProcessamentoPergunta:
+        """Salva a versão processada internamente da pergunta e suas entidades."""
+        ...
+
+    @abstractmethod
+    async def get_processamento_por_mensagem(
+        self,
+        mensagem_id: UUID,
+    ) -> tuple[ProcessamentoPergunta | None, list[EntidadeExtraida]]:
+        """Recupera o processamento e as entidades ligadas a uma mensagem."""
+        ...
+
+    @abstractmethod
     async def add_fonte_resposta(self, fonte: FonteResposta) -> FonteResposta:
         """Salva a origem (fonte) de uma resposta do bot."""
-        pass
+        ...
 
     @abstractmethod
     async def get_fontes_por_mensagem(self, mensagem_id: UUID) -> list[FonteResposta]:
         """Recupera as fontes utilizadas pelo bot para gerar uma resposta específica."""
-        pass
+        ...
 
     @abstractmethod
     async def list_all(self) -> list[Conversa]:
         """Retorna todas as conversas do banco (Necessário para o MetricsService)."""
-        pass
+        ...

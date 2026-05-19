@@ -2,6 +2,7 @@ from uuid import UUID
 
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem
+from catbot.domain.entities.processamento import EntidadeExtraida, ProcessamentoPergunta
 from catbot.domain.entities.resposta import FonteResposta, Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 
@@ -12,6 +13,8 @@ class InMemoryConversaRepository(ConversaRepository):
         self._mensagens: dict[UUID, list[Mensagem]] = {}
         self._respostas: dict[UUID, Resposta] = {}
         self._fontes: dict[UUID, list[FonteResposta]] = {}
+        self._processamentos: dict[UUID, ProcessamentoPergunta] = {}
+        self._entidades_por_processamento: dict[UUID, list[EntidadeExtraida]] = {}
 
     async def get_by_id(self, conversa_id: UUID) -> Conversa | None:
         return self._conversas.get(conversa_id)
@@ -38,6 +41,27 @@ class InMemoryConversaRepository(ConversaRepository):
     async def save_resposta(self, resposta: Resposta) -> Resposta:
         self._respostas[resposta.id] = resposta
         return resposta
+
+    async def save_processamento(
+        self,
+        processamento: ProcessamentoPergunta,
+        entidades: list[EntidadeExtraida],
+        intencao_nome: str | None = None,
+    ) -> ProcessamentoPergunta:
+        self._processamentos[processamento.mensagem_id] = processamento
+        self._entidades_por_processamento[processamento.id] = list(entidades)
+        return processamento
+
+    async def get_processamento_por_mensagem(
+        self,
+        mensagem_id: UUID,
+    ) -> tuple[ProcessamentoPergunta | None, list[EntidadeExtraida]]:
+        processamento = self._processamentos.get(mensagem_id)
+        if processamento is None:
+            return None, []
+        return processamento, list(
+            self._entidades_por_processamento.get(processamento.id, [])
+        )
 
     async def add_fonte_resposta(self, fonte: FonteResposta) -> FonteResposta:
         self._fontes.setdefault(fonte.resposta_id, []).append(fonte)

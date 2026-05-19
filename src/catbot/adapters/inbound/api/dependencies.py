@@ -103,6 +103,7 @@ class Container:
         self.export_service = ExportService(
             conversa_repo=self.conversa_repo,
             history_service=self.history_service,
+            documento_repo=self.documento_repo,
         )
         self.metrics_service = MetricsService(conversa_repo=self.conversa_repo)
 

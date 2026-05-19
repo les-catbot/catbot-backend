@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from catbot.adapters.inbound.api.dependencies import get_chat_service
 from catbot.adapters.inbound.api.schemas.chat import (
+    FonteResponse,
     NovaConversaRequest,
     NovaConversaResponse,
     PerguntaRequest,
     PerguntaResponse,
-    FonteResponse
 )
 from catbot.application.services.chat_service import ChatService
 
@@ -32,6 +32,11 @@ async def perguntar(
         result = await service.processar_pergunta(
             conversa_id=body.conversa_id,
             texto_usuario=body.texto,
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
         )
     except ValueError as exc:
         raise HTTPException(

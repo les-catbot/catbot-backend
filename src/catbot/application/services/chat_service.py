@@ -1,11 +1,13 @@
 """Caso de uso: Realizar Pergunta em Linguagem Natural com Histórico (Memória)."""
 
+import json
 from dataclasses import dataclass, field
 from uuid import UUID
 
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.entities.mensagem import Mensagem, StatusValidacao, TipoRemetente
+from catbot.domain.entities.processamento import EntidadeExtraida, ProcessamentoPergunta
 from catbot.domain.entities.resposta import FonteResposta, Resposta
 from catbot.domain.ports.conversa_repository import ConversaRepository
 from catbot.domain.ports.llm_client import LLMClient
@@ -76,6 +78,10 @@ class ChatService:
         if not texto_usuario or not texto_usuario.strip():
             raise ValueError("A pergunta não pode estar vazia.")
 
+        conversa = await self._conversa_repo.get_by_id(conversa_id)
+        if conversa is None:
+            raise LookupError("Conversa não encontrada.")
+
         msg_usuario = Mensagem(
             conversa_id=conversa_id,
             conteudo=texto_usuario.strip(),
@@ -88,6 +94,25 @@ class ChatService:
         historico_passado = [m for m in todas_mensagens if m.id != msg_usuario.id]
 
         nlp_result = await self._nlp.process(msg_usuario.conteudo)
+        processamento = ProcessamentoPergunta(
+            mensagem_id=msg_usuario.id,
+            texto_normalizado=nlp_result.texto_normalizado,
+            tokens=json.dumps(nlp_result.tokens, ensure_ascii=True),
+        )
+        entidades_extraidas = [
+            EntidadeExtraida(
+                processamento_id=processamento.id,
+                nome_entidade=nome,
+                valor_entidade=str(valor),
+            )
+            for nome, valor in nlp_result.entidades.items()
+        ]
+        await self._conversa_repo.save_processamento(
+            processamento=processamento,
+            entidades=entidades_extraidas,
+            intencao_nome=nlp_result.intencao,
+        )
+
         intencao = nlp_result.intencao
         query_busca = msg_usuario.conteudo.strip()
         chunks_relevantes = []

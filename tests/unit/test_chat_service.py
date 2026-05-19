@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from catbot.application.services.chat_service import ChatService
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
 from catbot.domain.entities.conversa import Conversa
 from catbot.domain.ports.llm_client import LLMClient, LLMResponse
+from catbot.domain.ports.nlp_processor import NLPProcessor, NLPResult
 
 
 @pytest.fixture
@@ -64,6 +66,17 @@ async def test_processar_pergunta_vazia_levanta_erro(chat_service: ChatService):
 
 
 @pytest.mark.asyncio
+async def test_processar_pergunta_em_conversa_inexistente_levanta_erro(
+    chat_service: ChatService,
+):
+    with pytest.raises(LookupError, match="Conversa não encontrada"):
+        await chat_service.processar_pergunta(
+            conversa_id=uuid4(),
+            texto_usuario="teste",
+        )
+
+
+@pytest.mark.asyncio
 async def test_saudacao_nao_usa_contexto_rag(conversa_repo: InMemoryConversaRepository):
     class RecordingLLM(LLMClient):
         def __init__(self) -> None:
@@ -102,3 +115,43 @@ async def test_saudacao_nao_usa_contexto_rag(conversa_repo: InMemoryConversaRepo
 
     assert llm.calls[0]["context"] == ""
     assert llm.calls[0]["system_prompt_override"] is not None
+
+
+@pytest.mark.asyncio
+async def test_processamento_da_pergunta_e_entidades_sao_persistidos(
+    conversa_repo: InMemoryConversaRepository,
+):
+    class NLPComEntidades(NLPProcessor):
+        async def process(self, texto: str) -> NLPResult:
+            return NLPResult(
+                texto_normalizado="prazo trancamento",
+                tokens=["prazo", "trancamento"],
+                intencao="DUVIDA_ROD",
+                entidades={"assunto": "trancamento", "campus": "Colatina"},
+            )
+
+    kb_service = KnowledgeBaseService(
+        documento_repo=InMemoryDocumentoRepository(),
+        embedding_service=StubEmbeddingService(),
+        vector_repo=InMemoryVectorRepository(),
+    )
+    service = ChatService(
+        conversa_repo=conversa_repo,
+        nlp_processor=NLPComEntidades(),
+        llm_client=StubLLMClient(),
+        kb_service=kb_service,
+    )
+    conversa = await conversa_repo.save(Conversa(usuario_id=uuid4()))
+
+    await service.processar_pergunta(conversa.id, "Qual o prazo para trancamento?")
+
+    mensagens = await conversa_repo.get_mensagens(conversa.id)
+    msg_usuario = next(msg for msg in mensagens if msg.tipo_remetente.value == "usuario")
+    processamento, entidades = await conversa_repo.get_processamento_por_mensagem(
+        msg_usuario.id
+    )
+
+    assert processamento is not None
+    assert processamento.texto_normalizado == "prazo trancamento"
+    assert json.loads(processamento.tokens) == ["prazo", "trancamento"]
+    assert {entidade.nome_entidade for entidade in entidades} == {"assunto", "campus"}
