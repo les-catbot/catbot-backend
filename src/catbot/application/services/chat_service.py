@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from catbot.application.services.knowledge_base_service import KnowledgeBaseService
@@ -20,6 +21,13 @@ class ChatResult:
     confianca: float
     mensagem_id: UUID
     fontes: list[FonteResposta] = field(default_factory=list)
+
+
+def _to_utc(momento: datetime) -> datetime:
+    """Garante comparação segura tratando datas sem fuso como UTC."""
+    if momento.tzinfo is None:
+        return momento.replace(tzinfo=timezone.utc)
+    return momento
 
 
 class ChatService:
@@ -41,6 +49,45 @@ class ChatService:
         """Inicia uma nova sessão de chat para o usuário."""
         nova_conversa = Conversa(usuario_id=usuario_id)
         return await self._conversa_repo.save(nova_conversa)
+
+    async def encerrar_conversa(
+        self, conversa_id: UUID, momento: datetime | None = None
+    ) -> Conversa:
+        """Encerra manualmente uma conversa. Idempotente: reencerrar não altera o timestamp."""
+        conversa = await self._conversa_repo.get_by_id(conversa_id)
+        if conversa is None:
+            raise LookupError("Conversa não encontrada.")
+        if conversa.esta_encerrada:
+            return conversa
+
+        encerrado_em = momento or datetime.now(timezone.utc)
+        encerrada = await self._conversa_repo.encerrar(conversa_id, encerrado_em)
+        return encerrada or conversa
+
+    async def encerrar_inativas(
+        self, timeout_minutos: int, agora: datetime | None = None
+    ) -> list[UUID]:
+        """Encerra conversas sem novas mensagens há mais de `timeout_minutos`.
+
+        A inatividade é medida pela última mensagem da conversa (ou pelo
+        `iniciado_em`, caso ainda não haja mensagens). Retorna os ids encerrados.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        limite = agora - timedelta(minutes=timeout_minutos)
+
+        encerradas: list[UUID] = []
+        for conversa in await self._conversa_repo.list_abertas():
+            ultima_atividade = await self._ultima_atividade(conversa)
+            if ultima_atividade <= limite:
+                await self._conversa_repo.encerrar(conversa.id, agora)
+                encerradas.append(conversa.id)
+        return encerradas
+
+    async def _ultima_atividade(self, conversa: Conversa) -> datetime:
+        mensagens = await self._conversa_repo.get_mensagens(conversa.id)
+        if not mensagens:
+            return _to_utc(conversa.iniciado_em)
+        return max(_to_utc(m.criado_em) for m in mensagens)
 
     def _montar_contexto(
         self,
@@ -81,6 +128,8 @@ class ChatService:
         conversa = await self._conversa_repo.get_by_id(conversa_id)
         if conversa is None:
             raise LookupError("Conversa não encontrada.")
+        if conversa.esta_encerrada:
+            raise ValueError("Conversa encerrada. Inicie uma nova conversa para continuar.")
 
         msg_usuario = Mensagem(
             conversa_id=conversa_id,

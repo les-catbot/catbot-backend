@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -50,6 +51,24 @@ class SQLAlchemyConversaRepository(ConversaRepository):
         async with self._sf() as session:
             result = await session.execute(
                 select(ConversaModel).where(ConversaModel.usuario_id == usuario_id)
+            )
+            return [_to_entity(r) for r in result.scalars().all()]
+
+    async def encerrar(self, conversa_id: UUID, encerrado_em: datetime) -> Conversa | None:
+        async with self._sf() as session:
+            row = await session.get(ConversaModel, conversa_id)
+            if row is None:
+                return None
+            if row.encerrado_em is None:
+                row.encerrado_em = encerrado_em
+                await session.commit()
+                await session.refresh(row)
+            return _to_entity(row)
+
+    async def list_abertas(self) -> list[Conversa]:
+        async with self._sf() as session:
+            result = await session.execute(
+                select(ConversaModel).where(ConversaModel.encerrado_em.is_(None))
             )
             return [_to_entity(r) for r in result.scalars().all()]
 
@@ -216,6 +235,7 @@ def _to_entity(row: ConversaModel) -> Conversa:
         usuario_id=row.usuario_id,
         status_sucesso=row.status_sucesso,
         iniciado_em=row.iniciado_em,
+        encerrado_em=row.encerrado_em,
     )
 
 

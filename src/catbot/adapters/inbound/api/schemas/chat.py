@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 from typing import List
 from pydantic import BaseModel, Field
@@ -8,6 +9,14 @@ class NovaConversaRequest(BaseModel):
 
 class NovaConversaResponse(BaseModel):
     conversa_id: UUID
+
+# --- Schemas para Encerrar Conversa ---
+class EncerrarConversaRequest(BaseModel):
+    conversa_id: UUID
+
+class EncerrarConversaResponse(BaseModel):
+    conversa_id: UUID
+    encerrado_em: datetime
 
 # --- Schemas de Fontes (Rastreabilidade) ---
 class FonteResponse(BaseModel):

@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from catbot.domain.entities.conversa import Conversa
@@ -27,6 +28,17 @@ class InMemoryConversaRepository(ConversaRepository):
 
     async def list_by_usuario(self, usuario_id: UUID) -> list[Conversa]:
         return [c for c in self._conversas.values() if c.usuario_id == usuario_id]
+
+    async def encerrar(self, conversa_id: UUID, encerrado_em: datetime) -> Conversa | None:
+        conversa = self._conversas.get(conversa_id)
+        if conversa is None:
+            return None
+        if conversa.encerrado_em is None:
+            conversa.encerrado_em = encerrado_em
+        return conversa
+
+    async def list_abertas(self) -> list[Conversa]:
+        return [c for c in self._conversas.values() if c.encerrado_em is None]
 
     async def add_mensagem(self, mensagem: Mensagem) -> Mensagem:
         if mensagem.conversa_id not in self._mensagens:

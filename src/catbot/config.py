@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "troque-esta-chave-em-producao"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # --- Encerramento automático de conversas por inatividade ---
+    # Tempo (em minutos) sem novas mensagens antes de uma conversa ser encerrada.
+    CONVERSA_TIMEOUT_MINUTES: int = 5
+    # Frequência (em segundos) com que a varredura de inatividade roda em background.
+    CONVERSA_TIMEOUT_CHECK_INTERVAL_SECONDS: int = 60
+
     # --- Mantidos para compatibilidade com código legado (Ollama) ---
     LLM_BASE_URL: str = "http://localhost:11434"
 

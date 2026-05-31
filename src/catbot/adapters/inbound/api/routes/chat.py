@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from catbot.adapters.inbound.api.dependencies import get_chat_service
 from catbot.adapters.inbound.api.schemas.chat import (
+    EncerrarConversaRequest,
+    EncerrarConversaResponse,
     FonteResponse,
     NovaConversaRequest,
     NovaConversaResponse,
@@ -21,6 +23,31 @@ async def iniciar_conversa(
 ) -> NovaConversaResponse:
     conversa = await service.iniciar_conversa(usuario_id=body.usuario_id)
     return NovaConversaResponse(conversa_id=conversa.id)
+
+
+@router.post(
+    "/encerrar",
+    response_model=EncerrarConversaResponse,
+    summary="Encerrar uma conversa",
+    description=(
+        "Encerra manualmente uma conversa, registrando o `encerrado_em`. "
+        "A operação é idempotente: encerrar uma conversa já encerrada devolve "
+        "o timestamp original sem alterá-lo."
+    ),
+)
+async def encerrar_conversa(
+    body: EncerrarConversaRequest,
+    service: ChatService = Depends(get_chat_service),
+) -> EncerrarConversaResponse:
+    try:
+        conversa = await service.encerrar_conversa(conversa_id=body.conversa_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    return EncerrarConversaResponse(
+        conversa_id=conversa.id,
+        encerrado_em=conversa.encerrado_em,
+    )
 
 
 @router.post("/perguntar", response_model=PerguntaResponse)

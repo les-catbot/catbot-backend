@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from catbot.domain.entities.conversa import Conversa
@@ -16,6 +17,16 @@ class ConversaRepository(ABC):
 
     @abstractmethod
     async def list_by_usuario(self, usuario_id: UUID) -> list[Conversa]: ...
+
+    @abstractmethod
+    async def encerrar(self, conversa_id: UUID, encerrado_em: datetime) -> Conversa | None:
+        """Registra o instante de encerramento de uma conversa. Idempotente."""
+        ...
+
+    @abstractmethod
+    async def list_abertas(self) -> list[Conversa]:
+        """Lista conversas ainda não encerradas (encerrado_em IS NULL)."""
+        ...
 
     @abstractmethod
     async def add_mensagem(self, mensagem: Mensagem) -> Mensagem: ...
