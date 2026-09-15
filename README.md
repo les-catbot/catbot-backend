@@ -1,78 +1,88 @@
 # CatBot Backend
 
-Backend do CatBot com arquitetura hexagonal, FastAPI, PostgreSQL/pgvector e OpenAI.
+Backend de um chatbot com RAG (Retrieval-Augmented Generation) construído em
+**arquitetura hexagonal** (Ports & Adapters), permitindo trocar de provedor de
+LLM/embeddings ou de banco de dados sem tocar na lógica de negócio.
 
-## Execução Recomendada
+## O problema que resolve
+Responder perguntas com base numa base de documentos própria (não no
+conhecimento genérico do modelo), sempre citando a fonte da resposta e um
+grau de confiança — em vez de um chatbot que só "conversa" sem embasamento.
 
-O fluxo real do RAG usa PostgreSQL com pgvector. O Docker Compose sobe apenas o banco;
-a API roda localmente para usar sua `OPENAI_API_KEY` no `.env`.
+## Como funciona (fluxo de RAG)
+1. Documentos (TXT/MD/CSV/PDF) são enviados e divididos em *chunks* configuráveis
+   (`CHUNK_SIZE`, `CHUNK_OVERLAP`).
+2. Cada chunk vira um embedding (OpenAI ou Ollama) e é salvo no PostgreSQL via
+   **pgvector**.
+3. Ao perguntar, o sistema busca os `RAG_TOP_K` chunks mais relevantes,
+   filtra por categoria e monta o contexto para o LLM.
+4. A resposta volta com as fontes utilizadas (`documento_id` + trecho) e uma
+   pontuação de confiança — não é uma caixa-preta.
+5. Documentos podem ser reindexados (individualmente ou em lote) sem apagar o
+   histórico de versões.
 
+## Arquitetura
+```
+adapters/inbound/api      → rotas FastAPI (chat, documentos, auth, avaliação,
+                             histórico, exportação, métricas, health)
+application/services      → regras de negócio (ChatService, KnowledgeBaseService,
+                             AuthService, EvaluationService, ExportService...)
+domain/ports               → interfaces (contratos) que a aplicação depende
+domain/entities             → modelos de domínio puros, sem dependência de framework
+adapters/outbound/*        → implementações reais das portas:
+                             persistence (SQLAlchemy+pgvector, ou in-memory p/ testes)
+                             llm (OpenAI, Ollama, ou stub p/ testes)
+                             embedding (OpenAI, Ollama, ou stub p/ testes)
+                             nlp (spaCy + heurísticas híbridas)
+```
+A regra de negócio nunca importa FastAPI, SQLAlchemy ou a SDK da OpenAI
+diretamente — só as *ports* (interfaces) do domínio. Isso é o que permite
+rodar os testes unitários inteiros com repositórios em memória e um LLM
+"stub", sem precisar de banco nem de chave de API.
+
+## Tecnologias
+Python 3.12+, FastAPI, SQLAlchemy 2.0 (async) + asyncpg, PostgreSQL + pgvector,
+Alembic, JWT (python-jose + PyJWT), spaCy, OpenAI SDK, Ollama (adapter legado),
+Docker Compose, pytest + pytest-asyncio, ruff.
+
+## Como rodar
 ```bash
-cp .env.example .env
-docker compose up -d db
-.venv\Scripts\activate
+cp .env.example .env          # preencha sua OPENAI_API_KEY
+docker compose up -d db       # sobe só o Postgres/pgvector
 pip install -e ".[dev,nlp]"
 alembic upgrade head
 uvicorn catbot.main:app --reload
 ```
+API em `http://localhost:8000`, documentação interativa em `/docs`.
 
-A API fica em `http://localhost:8000` e a documentação em
-`http://localhost:8000/docs`.
+## Principais endpoints (`/api/v1`)
+`POST /chat/iniciar` · `POST /chat/perguntar` · `POST /documentos` (upload) ·
+`POST /documentos/reindexar` · `POST /avaliacoes` (feedback da resposta) ·
+`GET /historico` · `GET /exportacao` (PDF da conversa) · `GET /metricas` ·
+`POST /auth/login` · `GET /health`
 
-## Variáveis de Ambiente
-
-```env
-REPOSITORY_TYPE=sqlalchemy
-DATABASE_URL=postgresql+asyncpg://catbot:catbot@localhost:5433/catbot
-
-LLM_PROVIDER=openai
-EMBEDDING_PROVIDER=openai
-OPENAI_API_KEY=sua-chave
-LLM_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-```
-
-Ollama permanece como adapter legado. Para usá-lo manualmente, configure
-`LLM_PROVIDER=ollama`, `EMBEDDING_PROVIDER=ollama`, `LLM_BASE_URL` e os modelos
-compatíveis.
-
-## RAG e Documentos
-
-Documentos são processados pelo `KnowledgeBaseService`:
-
-1. extrai texto de `conteudo` bruto, TXT/MD/CSV ou PDF;
-2. divide o texto em chunks com `CHUNK_SIZE` e `CHUNK_OVERLAP`;
-3. gera embeddings com OpenAI;
-4. salva os chunks em `chunk_documento.embedding` para busca via pgvector;
-5. consulta chunks similares e filtra por categoria no fluxo do chat.
-
-Embeddings antigos do Ollama não devem ser misturados com embeddings OpenAI. Após
-migrar uma base existente, reindexe os documentos já cadastrados:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/documentos/reindexar
-```
-
-Para reindexar um documento específico:
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/documentos/reindexar?documento_id=<uuid>"
-```
-
-Esse processo apaga apenas chunks antigos e os reconstrói a partir das versões em
-`versao_documento`; os registros de `documento` são preservados.
-
-## Migrações
-
-```bash
-alembic upgrade head
-alembic revision --autogenerate -m "descricao"
-```
+## Decisões técnicas
+- **Arquitetura hexagonal**: trocar OpenAI por Ollama, ou Postgres por
+  repositórios em memória nos testes, é questão de configuração, não de
+  reescrever código de negócio.
+- **Stub adapters para LLM/embedding/NLP**: os testes unitários rodam em
+  milissegundos, sem chamar API externa nem precisar de banco.
+- **Reindexação sem perda de versão**: trocar de provedor de embedding não
+  mistura vetores incompatíveis, e o histórico de versões do documento é
+  preservado.
 
 ## Testes
-
+42 funções de teste (unitários + integração), cobrindo services, adapters e
+as rotas principais da API:
 ```bash
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m compileall -q src tests
-.venv\Scripts\python.exe -m ruff check src tests
+pytest -q
 ```
+
+## Autoria
+Projeto em equipe, desenvolvido por **Daniel Donateli** e **Victor Cordeiro**.
+Minha atuação: autenticação (JWT), integração com a OpenAI, fluxo de
+pergunta/resposta do chat e parte dos testes de integração.
+
+## Próximos passos
+CI no GitHub Actions rodando os testes automaticamente, cobertura de testes
+publicada, e um cliente MCP para expor o chat como ferramenta de IA.
